@@ -2,19 +2,37 @@
 
 from __future__ import annotations
 
+import enum
+from typing import TypedDict
+
 _BASE_URL = "https://ft-checker.com"
 _PYPI_API = "https://pypi.org/pypi/{package}/json"
 _USER_AGENT = "ftready/0.1.0"
 
-STATUS_SUCCESS = "Success"
-STATUS_FAILED = "Failed"
-STATUS_UNKNOWN = "Unknown"
-STATUS_NOT_TESTED = "Not tested"
+
+class Status(enum.StrEnum):
+    """Compatibility status for a package against a free-threaded Python build."""
+
+    SUCCESS = "Success"
+    FAILED = "Failed"
+    UNKNOWN = "Unknown"
+    NOT_TESTED = "Not tested"
+
+
+# Convenience aliases for backwards compatibility and brevity.
+STATUS_SUCCESS = Status.SUCCESS
+STATUS_FAILED = Status.FAILED
+STATUS_UNKNOWN = Status.UNKNOWN
+STATUS_NOT_TESTED = Status.NOT_TESTED
 
 _DEFAULT_CACHE_TTL_HOURS = 24
 _DEFAULT_MAX_WORKERS = 10
 _HTTP_TIMEOUT = 15  # seconds
 _FALLBACK_PAGES = 50
 
-# ft-checker DB: maps normalised_name -> {"3.13t": status, "3.14t": status, "checked_at": date}.
-FTDb = dict[str, dict[str, str]]
+
+# Use functional form: "3.13t" / "3.14t" are not valid Python identifiers.
+FTEntry = TypedDict("FTEntry", {"3.13t": str, "3.14t": str, "checked_at": str})
+
+# ft-checker DB: maps normalised_name -> FTEntry.
+FTDb = dict[str, FTEntry]

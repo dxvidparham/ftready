@@ -72,3 +72,24 @@ class TestGenerateReport:
         results = [PackageResult("ruff", ">=0.4", STATUS_SUCCESS, STATUS_SUCCESS)]
         report = generate_report(results, include_dev=True, use_rich=False)
         assert "included" in report
+
+
+class TestRichReport:
+    def test_rich_report_contains_packages(self, mocker):
+        """When rich is available the report should still contain all package names."""
+        mocker.patch("ftready.report._RICH_AVAILABLE", True)
+        results = [
+            PackageResult("numpy", ">=1.26", STATUS_SUCCESS, STATUS_SUCCESS, source="ft-checker.com"),
+            PackageResult("click", ">=8.0", STATUS_FAILED, STATUS_FAILED, source="ft-checker.com"),
+        ]
+        report = generate_report(results, include_dev=False, use_rich=True)
+        assert "numpy" in report
+        assert "click" in report
+
+    def test_rich_report_disabled_falls_back_to_plain(self, mocker):
+        """When rich is explicitly disabled, plain text should be used."""
+        results = [PackageResult("pkg", "1.0", STATUS_SUCCESS, STATUS_UNKNOWN)]
+        report = generate_report(results, include_dev=False, use_rich=False)
+        # Plain text uses ASCII table separators
+        assert "+" in report
+        assert "|" in report

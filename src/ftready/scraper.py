@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sys
 import urllib.error
@@ -102,6 +103,8 @@ class _FTPageParser(HTMLParser):
 # HTTP helpers
 # ---------------------------------------------------------------------------
 
+_logger = logging.getLogger(__name__)
+
 
 def _http_get(url: str) -> str:
     """Fetch *url* and return decoded body text, or empty string on error."""
@@ -113,6 +116,7 @@ def _http_get(url: str) -> str:
         with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
             return resp.read().decode("utf-8", errors="replace")
     except urllib.error.URLError:
+        _logger.debug("HTTP request failed for %s", url, exc_info=True)
         return ""
 
 
@@ -161,6 +165,7 @@ def _load_cache(path: Path) -> tuple[FTDb, str]:
         raw: dict = json.loads(path.read_text(encoding="utf-8"))
         return raw["entries"], raw["fetched_at"]
     except (json.JSONDecodeError, KeyError, TypeError):
+        _logger.debug("Corrupt or invalid cache file: %s", path, exc_info=True)
         return {}, ""
 
 
@@ -239,6 +244,7 @@ def check_pypi_freethreaded(package: str) -> dict[str, str]:
         with urllib.request.urlopen(url, timeout=_HTTP_TIMEOUT) as resp:
             data = json.loads(resp.read())
     except (urllib.error.URLError, json.JSONDecodeError):
+        _logger.debug("PyPI lookup failed for %s", package, exc_info=True)
         return {"3.13t": STATUS_UNKNOWN, "3.14t": STATUS_UNKNOWN}
 
     filenames = " ".join(u.get("filename", "") for u in data.get("urls", []))

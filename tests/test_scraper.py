@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from ftready.constants import STATUS_NOT_TESTED, STATUS_SUCCESS
@@ -11,6 +12,7 @@ from ftready.scraper import (
     _load_cache,
     _save_cache,
     check_pypi_freethreaded,
+    fetch_ftchecker_db,
 )
 
 
@@ -127,3 +129,52 @@ class TestPyPIFallback:
         result = check_pypi_freethreaded("pkg")
         assert result["3.13t"] == STATUS_NOT_TESTED
         assert result["3.14t"] == STATUS_NOT_TESTED
+
+
+class TestCacheTTL:
+    """Test cache TTL boundary conditions in fetch_ftchecker_db."""
+
+    def _write_cache(self, path: Path, entries: dict, fetched_at: str) -> None:
+        payload = json.dumps({"fetched_at": fetched_at, "entries": entries}, indent=2)
+        path.write_text(payload, encoding="utf-8")
+
+    def test_fresh_cache_is_used(self, cache_file: Path, mocker):
+        """Cache within TTL should be returned without scraping."""
+        entries = {"numpy": {"3.13t": "Success", "3.14t": "Success", "checked_at": "2026-01-15"}}
+        recent = (datetime.now(tz=UTC) - timedelta(hours=1)).isoformat()
+        self._write_cache(cache_file, entries, recent)
+
+        mock_get = mocker.patch("ftready.scraper._http_get", autospec=True)
+        result = fetch_ftchecker_db(cache_file, ttl_hours=24)
+        assert result == entries
+        mock_get.assert_not_called()
+
+    def test_expired_cache_triggers_scrape(self, cache_file: Path, mocker):
+        """Cache beyond TTL should trigger a fresh scrape."""
+        old_entries = {"old-pkg": {"3.13t": "Failed", "3.14t": "Failed", "checked_at": "2024-01-01"}}
+        expired = (datetime.now(tz=UTC) - timedelta(hours=25)).isoformat()
+        self._write_cache(cache_file, old_entries, expired)
+
+        page_html = """
+        <h2>Python 3.13t Compatibility Results</h2>
+        <table>
+        <tr><td>fresh-pkg</td><td>1.0</td><td>Success</td><td></td><td>2026-01-15</td></tr>
+        </table>
+        """
+        mocker.patch("ftready.scraper._http_get", autospec=True, return_value=page_html)
+        result = fetch_ftchecker_db(cache_file, ttl_hours=24)
+        assert "fresh-pkg" in result
+        assert "old-pkg" not in result
+
+    def test_missing_cache_triggers_scrape(self, tmp_path: Path, mocker):
+        """No cache file should trigger a fresh scrape."""
+        missing = tmp_path / "missing_cache.json"
+        page_html = """
+        <h2>Python 3.13t Compatibility Results</h2>
+        <table>
+        <tr><td>new-pkg</td><td>2.0</td><td>Success</td><td></td><td>2026-06-01</td></tr>
+        </table>
+        """
+        mocker.patch("ftready.scraper._http_get", autospec=True, return_value=page_html)
+        result = fetch_ftchecker_db(missing, ttl_hours=24)
+        assert "new-pkg" in result

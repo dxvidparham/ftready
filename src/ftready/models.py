@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from ftready.constants import STATUS_SUCCESS, STATUS_UNKNOWN
 
 
-@dataclass
+@dataclass(frozen=True)
 class PackageResult:
     """
     Compatibility result for a single dependency.

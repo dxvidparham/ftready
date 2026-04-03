@@ -9,6 +9,7 @@ from ftready.parser import (
     _strip_version_specifier,
     load_dependencies,
     load_lockfile_dependencies,
+    load_requirements,
 )
 
 
@@ -97,3 +98,52 @@ class TestLoadLockfileDependencies:
         lock.write_text("")
         deps = load_lockfile_dependencies(lock, set())
         assert deps == {}
+
+
+class TestLoadRequirements:
+    def test_parses_packages_with_versions(self, tmp_path: Path):
+        """Given a requirements.txt with versioned deps, then all packages are extracted."""
+        req = tmp_path / "requirements.txt"
+        req.write_text("numpy>=1.26\nrequests>=2.31,<3\n")
+        deps = load_requirements(req)
+        assert "numpy" in deps
+        assert "requests" in deps
+
+    def test_skips_comments_and_blank_lines(self, tmp_path: Path):
+        """Given comments and blank lines, then they are ignored."""
+        req = tmp_path / "requirements.txt"
+        req.write_text("# this is a comment\n\nnumpy>=1.26\n  \n")
+        deps = load_requirements(req)
+        assert len(deps) == 1
+        assert "numpy" in deps
+
+    def test_skips_directives(self, tmp_path: Path):
+        """Given pip directives like -r and --index-url, then they are skipped."""
+        req = tmp_path / "requirements.txt"
+        req.write_text("-r base.txt\n--index-url https://example.com\nnumpy\n-e ./local-pkg\n")
+        deps = load_requirements(req)
+        assert len(deps) == 1
+        assert "numpy" in deps
+
+    def test_strips_inline_comments(self, tmp_path: Path):
+        """Given inline comments after package names, then they are stripped."""
+        req = tmp_path / "requirements.txt"
+        req.write_text("numpy>=1.26  # needed for arrays\n")
+        deps = load_requirements(req)
+        assert "numpy" in deps
+        assert "#" not in deps["numpy"]
+
+    def test_normalises_package_names(self, tmp_path: Path):
+        """Given non-canonical names, then they are normalised."""
+        req = tmp_path / "requirements.txt"
+        req.write_text("Scikit_Learn>=1.0\nzope.interface\n")
+        deps = load_requirements(req)
+        assert "scikit-learn" in deps
+        assert "zope-interface" in deps
+
+    def test_handles_extras(self, tmp_path: Path):
+        """Given packages with extras, then the name is extracted without the extras."""
+        req = tmp_path / "requirements.txt"
+        req.write_text("package[extra1,extra2]>=1.0\n")
+        deps = load_requirements(req)
+        assert "package" in deps
