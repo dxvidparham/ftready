@@ -10,7 +10,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from html.parser import HTMLParser
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ftready.constants import (
     _BASE_URL,
@@ -26,6 +26,9 @@ from ftready.constants import (
     STATUS_UNKNOWN,
     FTDb,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _logger = logging.getLogger(__name__)
 
@@ -58,12 +61,16 @@ def check_pypi_freethreaded(package: str) -> dict[str, str]:
     """
     Query the PyPI JSON API to infer free-threaded support from wheel filenames.
 
+    Only the **latest release** files are inspected.  If a user pins an older
+    version whose wheel set differs, the result may not reflect that version.
+
     :param package: Normalised package name.
     :return: ``{"3.13t": status, "3.14t": status}``
     """
     url = _PYPI_API.format(package=package)
+    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     try:
-        with urllib.request.urlopen(url, timeout=_HTTP_TIMEOUT) as resp:
+        with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
             data = json.loads(resp.read())
     except (urllib.error.URLError, json.JSONDecodeError):
         _logger.debug("PyPI lookup failed for %s", package, exc_info=True)
@@ -229,8 +236,12 @@ def _save_cache(path: Path, entries: FTDb) -> None:
     """Write *entries* to *path* atomically (write-then-rename)."""
     payload = json.dumps({"fetched_at": datetime.now(tz=UTC).isoformat(), "entries": entries}, indent=2)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(payload, encoding="utf-8")
-    Path(tmp).replace(path)
+    try:
+        tmp.write_text(payload, encoding="utf-8")
+        tmp.replace(path)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 # ---------------------------------------------------------------------------
