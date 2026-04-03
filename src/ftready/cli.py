@@ -116,8 +116,60 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _resolve_deps(args: argparse.Namespace) -> tuple[dict[str, str], set[str] | None] | int:
+    """
+    Load dependencies from the configured source.
+
+    :param args: Parsed CLI arguments.
+    :return: ``(deps, direct_names)`` tuple, or an ``int`` exit code on failure.
+    """
+    if args.requirements is not None:
+        if not args.requirements.exists():
+            print(f"Error: {args.requirements} not found.", file=sys.stderr)
+            return 2
+        if args.verbose:
+            print(f"[ftready] Reading {args.requirements} …", file=sys.stderr)
+        deps = load_requirements(args.requirements)
+        if args.verbose:
+            print(f"[ftready] Found {len(deps)} packages in {args.requirements}.", file=sys.stderr)
+        return deps, None
+
+    if not args.pyproject.exists():
+        print(f"Error: {args.pyproject} not found.", file=sys.stderr)
+        return 2
+    if args.verbose:
+        print(f"[ftready] Reading {args.pyproject} …", file=sys.stderr)
+
+    direct_deps = load_dependencies(args.pyproject, include_dev=args.include_dev)
+    direct_names = set(direct_deps.keys())
+
+    if args.all_deps:
+        lock_path = args.lock or args.pyproject.parent / "poetry.lock"
+        if not lock_path.exists():
+            print(f"Error: {lock_path} not found. Run 'poetry lock' first.", file=sys.stderr)
+            return 2
+        if args.verbose:
+            print(f"[ftready] Reading all deps from {lock_path} …", file=sys.stderr)
+        deps = load_lockfile_dependencies(lock_path, direct_names)
+        if args.verbose:
+            transitive = len(deps) - len(direct_names)
+            print(
+                f"[ftready] Found {len(deps)} packages in lock file "
+                f"({len(direct_names)} direct, {transitive} transitive).",
+                file=sys.stderr,
+            )
+    else:
+        deps = direct_deps
+        if args.verbose:
+            dev_note = " (including dev)" if args.include_dev else ""
+            print(f"[ftready] Found {len(deps)} direct dependencies{dev_note}.", file=sys.stderr)
+
+    return deps, direct_names
+
+
 def main(argv: list[str] | None = None) -> int:
-    """Entry point for the free-threaded compatibility checker.
+    """
+    Entry point for the free-threaded compatibility checker.
 
     :param argv: Override ``sys.argv`` arguments (useful for testing).
     :return: Exit code (0 = success, non-zero if any direct dependency has a *Failed* status).
@@ -127,49 +179,10 @@ def main(argv: list[str] | None = None) -> int:
     # ------------------------------------------------------------------ #
     # Resolve dependencies                                                  #
     # ------------------------------------------------------------------ #
-    direct_names: set[str] | None
-
-    if args.requirements is not None:
-        # requirements.txt mode — mutually exclusive with --all-deps / --lock
-        if not args.requirements.exists():
-            print(f"Error: {args.requirements} not found.", file=sys.stderr)
-            return 2
-        if args.verbose:
-            print(f"[ftready] Reading {args.requirements} …", file=sys.stderr)
-        deps = load_requirements(args.requirements)
-        direct_names = None  # every entry is treated as a direct dependency
-        if args.verbose:
-            print(f"[ftready] Found {len(deps)} packages in {args.requirements}.", file=sys.stderr)
-    else:
-        if not args.pyproject.exists():
-            print(f"Error: {args.pyproject} not found.", file=sys.stderr)
-            return 2
-        if args.verbose:
-            print(f"[ftready] Reading {args.pyproject} …", file=sys.stderr)
-
-        direct_deps = load_dependencies(args.pyproject, include_dev=args.include_dev)
-        direct_names = set(direct_deps.keys())
-
-        if args.all_deps:
-            lock_path = args.lock or args.pyproject.parent / "poetry.lock"
-            if not lock_path.exists():
-                print(f"Error: {lock_path} not found. Run 'poetry lock' first.", file=sys.stderr)
-                return 2
-            if args.verbose:
-                print(f"[ftready] Reading all deps from {lock_path} …", file=sys.stderr)
-            deps = load_lockfile_dependencies(lock_path, direct_names)
-            if args.verbose:
-                transitive = len(deps) - len(direct_names)
-                print(
-                    f"[ftready] Found {len(deps)} packages in lock file "
-                    f"({len(direct_names)} direct, {transitive} transitive).",
-                    file=sys.stderr,
-                )
-        else:
-            deps = direct_deps
-            if args.verbose:
-                dev_note = " (including dev)" if args.include_dev else ""
-                print(f"[ftready] Found {len(deps)} direct dependencies{dev_note}.", file=sys.stderr)
+    resolved = _resolve_deps(args)
+    if isinstance(resolved, int):
+        return resolved
+    deps, direct_names = resolved
 
     if args.no_cache and args.cache_file.exists():
         args.cache_file.unlink()

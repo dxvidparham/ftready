@@ -107,7 +107,8 @@ def generate_report(
     all_deps: bool = False,
     use_rich: bool = True,
 ) -> str:
-    """Generate the full compatibility report as a string.
+    """
+    Generate the full compatibility report as a string.
 
     :param results: List of :class:`PackageResult`.
     :param include_dev: Whether dev dependencies were included in the check.

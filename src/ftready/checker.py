@@ -6,7 +6,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 
-from ftready.constants import FTDb, STATUS_UNKNOWN, _DEFAULT_MAX_WORKERS
+from ftready.constants import _DEFAULT_MAX_WORKERS, STATUS_UNKNOWN, FTDb
 from ftready.models import PackageResult
 from ftready.scraper import check_pypi_freethreaded
 
@@ -19,7 +19,8 @@ def build_results(
     pypi_fallback: bool = True,
     verbose: bool = False,
 ) -> list[PackageResult]:
-    """Merge project dependencies with compatibility data.
+    """
+    Merge project dependencies with compatibility data.
 
     Packages present in *ft_db* are resolved immediately. Those absent are
     queried against the PyPI JSON API in parallel.

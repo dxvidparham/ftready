@@ -13,11 +13,6 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 from ftready.constants import (
-    FTDb,
-    STATUS_FAILED,
-    STATUS_NOT_TESTED,
-    STATUS_SUCCESS,
-    STATUS_UNKNOWN,
     _BASE_URL,
     _DEFAULT_CACHE_TTL_HOURS,
     _DEFAULT_MAX_WORKERS,
@@ -25,8 +20,12 @@ from ftready.constants import (
     _HTTP_TIMEOUT,
     _PYPI_API,
     _USER_AGENT,
+    STATUS_FAILED,
+    STATUS_NOT_TESTED,
+    STATUS_SUCCESS,
+    STATUS_UNKNOWN,
+    FTDb,
 )
-
 
 # ---------------------------------------------------------------------------
 # ft-checker.com HTML parser
@@ -34,7 +33,8 @@ from ftready.constants import (
 
 
 class _FTPageParser(HTMLParser):
-    """Extract compatibility rows from a single ft-checker.com page.
+    """
+    Extract compatibility rows from a single ft-checker.com page.
 
     The page contains two ``<table>`` blocks — one for 3.13t and one for 3.14t.
     Each row carries: package name | latest version | status | details | date.
@@ -51,7 +51,7 @@ class _FTPageParser(HTMLParser):
         self._row: list[str] = []
         self.entries: FTDb = {}
 
-    def handle_starttag(self, tag: str, attrs: list) -> None:
+    def handle_starttag(self, tag: str, attrs: list) -> None:  # noqa: ARG002
         if tag in {"h2", "h3", "h4"}:
             self._in_heading, self._heading_buf = True, ""
         elif tag == "tr":
@@ -108,9 +108,9 @@ def _http_get(url: str) -> str:
     if not url.startswith(("http:", "https:")):
         msg = f"Only http/https URLs are permitted, got: {url!r}"
         raise ValueError(msg)
-    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})  # noqa: S310
+    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     try:
-        with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
             return resp.read().decode("utf-8", errors="replace")
     except urllib.error.URLError:
         return ""
@@ -150,7 +150,8 @@ def _fetch_page(page: int) -> FTDb:
 
 
 def _load_cache(path: Path) -> tuple[FTDb, str]:
-    """Load cached ft-checker data.
+    """
+    Load cached ft-checker data.
 
     :return: ``(entries, fetched_at)`` — *fetched_at* is empty when absent or corrupt.
     """
@@ -183,7 +184,8 @@ def fetch_ftchecker_db(
     max_workers: int = _DEFAULT_MAX_WORKERS,
     verbose: bool = False,
 ) -> FTDb:
-    """Return a complete ft-checker.com compatibility DB, backed by a local cache.
+    """
+    Return a complete ft-checker.com compatibility DB, backed by a local cache.
 
     :param cache_file: Path to the local JSON cache file.
     :param ttl_hours: Cache TTL in hours before a fresh scrape is triggered.
@@ -224,7 +226,8 @@ def fetch_ftchecker_db(
 
 
 def check_pypi_freethreaded(package: str) -> dict[str, str]:
-    """Query the PyPI JSON API to infer free-threaded support from wheel filenames.
+    """
+    Query the PyPI JSON API to infer free-threaded support from wheel filenames.
 
     :param package: Normalised package name.
     :return: ``{"3.13t": status, "3.14t": status}``
@@ -233,7 +236,7 @@ def check_pypi_freethreaded(package: str) -> dict[str, str]:
     if not url.startswith(("http:", "https:")):
         return {"3.13t": STATUS_UNKNOWN, "3.14t": STATUS_UNKNOWN}
     try:
-        with urllib.request.urlopen(url, timeout=_HTTP_TIMEOUT) as resp:  # noqa: S310
+        with urllib.request.urlopen(url, timeout=_HTTP_TIMEOUT) as resp:
             data = json.loads(resp.read())
     except (urllib.error.URLError, json.JSONDecodeError):
         return {"3.13t": STATUS_UNKNOWN, "3.14t": STATUS_UNKNOWN}

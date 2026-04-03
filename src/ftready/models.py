@@ -9,7 +9,8 @@ from ftready.constants import STATUS_SUCCESS, STATUS_UNKNOWN
 
 @dataclass
 class PackageResult:
-    """Compatibility result for a single dependency.
+    """
+    Compatibility result for a single dependency.
 
     :param name: Canonical (normalised) package name.
     :param requested: Version constraint / resolved version string.

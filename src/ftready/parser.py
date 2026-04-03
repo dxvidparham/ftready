@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
-
 import tomllib
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _normalise_name(name: str) -> str:
@@ -14,18 +16,19 @@ def _normalise_name(name: str) -> str:
 
 
 def _strip_version_specifier(dep: str) -> str:
-    """Strip PEP 508 version specifiers and extras from a dependency string.
+    """
+    Strip PEP 508 version specifiers and extras from a dependency string.
 
     :param dep: Raw PEP 508 dependency string, e.g. ``"numpy>=1.26,<2 ; platform=..."``
     :return: Bare package name.
     """
     dep = dep.split(";", maxsplit=1)[0].strip()
-    dep = re.split(r"[\[>=<!~^]", dep)[0].strip()
-    return dep
+    return re.split(r"[\[>=<!~^]", dep)[0].strip()
 
 
 def _summarise_poetry_spec(spec: object) -> str:
-    """Return a concise human-readable version string from a Poetry dependency spec.
+    """
+    Return a concise human-readable version string from a Poetry dependency spec.
 
     :param spec: The raw value from ``[tool.poetry.dependencies]`` — either a
                  version string or a dict with keys like ``path``, ``version``, etc.
@@ -49,7 +52,8 @@ def load_lockfile_dependencies(
     lock_path: Path,
     direct_names: set[str],
 ) -> dict[str, str]:
-    """Parse ``poetry.lock`` and return a mapping of every resolved package to its pinned version.
+    """
+    Parse ``poetry.lock`` and return a mapping of every resolved package to its pinned version.
 
     :param lock_path: Path to the ``poetry.lock`` file.
     :param direct_names: Set of normalised direct-dependency names.
@@ -72,7 +76,8 @@ def load_lockfile_dependencies(
 
 
 def load_requirements(path: Path) -> dict[str, str]:
-    """Parse a ``requirements.txt``-style file and return a dependency mapping.
+    """
+    Parse a ``requirements.txt``-style file and return a dependency mapping.
 
     Handles inline comments, version specifiers, extras, environment markers,
     and skips directives (``-r``, ``-c``, ``-e``, ``--index-url``, etc.).
@@ -96,7 +101,8 @@ def load_requirements(path: Path) -> dict[str, str]:
 
 
 def load_dependencies(pyproject_path: Path, *, include_dev: bool = False) -> dict[str, str]:
-    """Parse ``pyproject.toml`` and return a mapping of normalised package name to version spec.
+    """
+    Parse ``pyproject.toml`` and return a mapping of normalised package name to version spec.
 
     :param pyproject_path: Path to the ``pyproject.toml`` file.
     :param include_dev: When ``True``, also include ``[tool.poetry.group.*.dependencies]``.

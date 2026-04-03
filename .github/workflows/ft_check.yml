@@ -1,82 +1,88 @@
 name: Free-threaded Compatibility Check
 
 on:
-  schedule:
-    - cron: "0 6 * * 1"  # Monday 06:00 UTC
-  workflow_dispatch:
-    inputs:
-      include_dev:
-        description: Include dev-only dependencies
-        type: boolean
-        default: false
-      no_cache:
-        description: Force a fresh scrape (ignore cache)
-        type: boolean
-        default: false
+    schedule:
+        - cron: "0 6 * * 1" # Monday 06:00 UTC
+    workflow_dispatch:
+        inputs:
+            include_dev:
+                description: Include dev-only dependencies
+                type: boolean
+                default: false
+            no_cache:
+                description: Force a fresh scrape (ignore cache)
+                type: boolean
+                default: false
 
 permissions:
-  contents: read
+    contents: read
 
 jobs:
-  ft-check:
-    name: Check free-threaded Python compatibility
-    runs-on: ubuntu-latest
+    ft-check:
+        name: Check free-threaded Python compatibility
+        runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+        concurrency:
+            group: ${{ github.workflow }}-${{ github.ref }}
+            cancel-in-progress: true
 
-      - name: Restore ft-checker cache
-        id: ft-cache
-        if: ${{ !inputs.no_cache }}
-        uses: actions/cache@v4
-        with:
-          path: .ft_cache.json
-          key: ft-checker-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}-${{ steps.date.outputs.date }}
-          restore-keys: |
-            ft-checker-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}-
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
 
-      - name: Get current date (cache key helper)
-        id: date
-        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+            - name: Get current date (cache key helper)
+              id: date
+              run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+            - name: Restore ft-checker cache
+              id: ft-cache
+              if: ${{ !inputs.no_cache }}
+              uses: actions/cache@v4
+              with:
+                  path: .ft_cache.json
+                  key: ft-checker-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}-${{ steps.date.outputs.date }}
+                  restore-keys: |
+                      ft-checker-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}-
 
-      - name: Install ftready
-        run: pip install .
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
 
-      - name: Run ftready
-        id: run-check
-        run: |
-          ARGS="--output ft_report.txt --verbose --plain"
-          if [ "${{ inputs.include_dev }}" = "true" ]; then ARGS="$ARGS --include-dev"; fi
-          if [ "${{ inputs.no_cache }}" = "true" ]; then ARGS="$ARGS --no-cache"; fi
-          ftready $ARGS
-          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
-        continue-on-error: true
+            - name: Install ftready
+              run: pip install .
 
-      - name: Write job summary
-        if: always()
-        run: |
-          echo "## Free-threaded Python Compatibility Report" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          cat ft_report.txt >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+            - name: Run ftready
+              id: run-check
+              run: |
+                  ARGS="--output ft_report.txt --verbose --plain"
+                  if [ "${{ inputs.include_dev }}" = "true" ]; then ARGS="$ARGS --include-dev"; fi
+                  if [ "${{ inputs.no_cache }}" = "true" ]; then ARGS="$ARGS --no-cache"; fi
+                  ftready $ARGS
+                  echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+              continue-on-error: true
 
-      - name: Upload report artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ft-check-report-${{ github.run_id }}
-          path: ft_report.txt
-          retention-days: 30
+            - name: Write job summary
+              if: always()
+              run: |
+                  echo "## Free-threaded Python Compatibility Report" >> "$GITHUB_STEP_SUMMARY"
+                  echo '```' >> "$GITHUB_STEP_SUMMARY"
+                  cat ft_report.txt >> "$GITHUB_STEP_SUMMARY"
+                  echo '```' >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Evaluate result
-        if: steps.run-check.outputs.exit_code != '0'
-        run: |
-          echo "::warning::One or more dependencies are marked as FAILED for free-threaded Python."
-          echo "See the uploaded artifact ft_report.txt for details."
-          exit 1
+            - name: Upload report artifact
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ft-check-report-${{ github.run_id }}
+                  path: ft_report.txt
+                  retention-days: 30
+
+            - name: Evaluate result
+              if: steps.run-check.outputs.exit_code != '0'
+              run: |
+                  echo "::warning::One or more dependencies are marked as FAILED for free-threaded Python."
+                  echo "See the uploaded artifact ft_report.txt for details."
+                  exit 1
+                          echo "See the uploaded artifact ft_report.txt for details."
+                          exit 1
