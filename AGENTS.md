@@ -4,9 +4,9 @@ You are an expert Python developer working on a CLI tool for checking free-threa
 
 ## Project Summary
 
-**ftready** is a standalone CLI tool that checks whether a Python project's dependencies support free-threaded Python (3.13t / 3.14t). It scrapes [ft-checker.com](https://ft-checker.com) and falls back to the PyPI JSON API to determine compatibility from wheel filenames (`cp313t`, `cp314t`).
+**ftready** is a standalone CLI tool that checks whether a Python project's dependencies support free-threaded Python (3.13t / 3.14t). It queries the **PyPI JSON API** for `cp313t`/`cp314t` wheel tags as the primary source and optionally enriches results with [ft-checker.com](https://ft-checker.com) test data.
 
-**Tech Stack:** Python 3.11+, uv, Hatchling, stdlib-only (rich optional), Ruff, ty, pytest
+**Tech Stack:** Python 3.11+, uv, Hatchling, rich-click, Ruff, pyright, pytest
 
 ## File Structure
 
@@ -18,6 +18,7 @@ You are an expert Python developer working on a CLI tool for checking free-threa
 ## Commands You Can Use
 
 ### Project Management (uv)
+
 ```bash
 # Sync all dependencies (dev + extras)
 uv sync --all-extras
@@ -33,6 +34,7 @@ uv lock
 ```
 
 ### Testing
+
 ```bash
 # Run all tests with coverage (primary test command)
 uv run pytest --cov-branch --cov=ftready
@@ -49,6 +51,7 @@ uv run pytest -m "network" -v
 ```
 
 ### Linting and Formatting
+
 ```bash
 # Check for linting issues
 uv run ruff check .
@@ -64,11 +67,13 @@ uv run prek --all-files
 ```
 
 ### Type Checking
+
 ```bash
-uv run ty check
+uv run pyright
 ```
 
 ### Building & Publishing
+
 ```bash
 # Build sdist + wheel
 uv build
@@ -78,6 +83,7 @@ uv publish
 ```
 
 ### Releasing
+
 ```bash
 # Preview next version (dry run)
 uv run semantic-release version --print
@@ -101,7 +107,7 @@ uv run semantic-release version
 - Use **Sphinx-style RST docstrings** for public classes and functions
 - Follow Ruff linting rules defined in `pyproject.toml`
 - Type hints on all function signatures
-- **Zero runtime dependencies** — only stdlib; `rich` is optional
+- **Minimal runtime dependencies** — only `rich-click`
 
 ## PR and Commit Guidelines
 
@@ -114,6 +120,7 @@ uv run semantic-release version
 ## Boundaries
 
 ### Always Do
+
 - Run `uv run pytest --cov-branch --cov=ftready` before committing
 - Run `uv run ruff check --fix . && uv run ruff format .` after code changes
 - Write tests for all new features
@@ -122,10 +129,12 @@ uv run semantic-release version
 - Follow Conventional Commits format
 
 ### Ask First
+
 - Before adding runtime dependencies (this tool is stdlib-only by design)
 - Before modifying CI/CD workflows
 
 ### Never Do
+
 - Make real HTTP calls in tests (except `@pytest.mark.network`)
 - Use wildcard imports (`from module import *`)
-- Add runtime dependencies beyond stdlib + optional rich
+- Add runtime dependencies beyond rich-click

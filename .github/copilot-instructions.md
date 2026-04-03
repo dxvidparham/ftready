@@ -26,8 +26,7 @@ These instructions guide GitHub Copilot in understanding code style, conventions
 ### Python Code Style
 
 * Follow **Ruff** linting rules as configured in `pyproject.toml`.
-* This project uses **only the stdlib** for core functionality — no third-party runtime dependencies.
-* `rich` is an optional dependency for prettier output.
+* `rich-click` is the sole required runtime dependency (provides Click CLI + Rich output).
 * Apply core design principles: **SOC**, **DRY**, **KISS**, **YAGNI**.
 * Optimize for **clarity and maintainability** over cleverness or micro-optimization.
 

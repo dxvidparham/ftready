@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-
 from ftready.cli import main
 
-sys.exit(main())
+main()  # type: ignore[call-arg]

@@ -1,81 +1,85 @@
-"""Merge dependency data with compatibility results."""
+"""Merge dependency data with compatibility results (PyPI-first, ft-checker enrichment)."""
 
 from __future__ import annotations
 
-import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
 from datetime import UTC, datetime
 
 from ftready.constants import _DEFAULT_MAX_WORKERS, STATUS_UNKNOWN, FTDb
 from ftready.models import PackageResult
-from ftready.scraper import check_pypi_freethreaded
+from ftready.scraper import check_pypi_batch
+
+_logger = logging.getLogger(__name__)
 
 
 def build_results(
     deps: dict[str, str],
-    ft_db: FTDb,
+    ft_db: FTDb | None = None,
     *,
     direct_names: set[str] | None = None,
     pypi_fallback: bool = True,
-    verbose: bool = False,
 ) -> list[PackageResult]:
     """
-    Merge project dependencies with compatibility data.
+    Build compatibility results — PyPI-first, ft-checker as enrichment.
 
-    Packages present in *ft_db* are resolved immediately. Those absent are
-    queried against the PyPI JSON API in parallel.
+    1. Query the PyPI JSON API for all packages in parallel (primary).
+    2. Overlay ft-checker.com data when available (enrichment).
+       ft-checker can downgrade a PyPI "Success" to "Failed" if tests
+       actually fail, or upgrade a "Not tested" to "Success" for
+       pure-Python packages that pass tests without shipping ``cp313t`` wheels.
 
     :param deps: Mapping from :func:`~ftready.parser.load_dependencies`.
-    :param ft_db: Mapping from :func:`~ftready.scraper.fetch_ftchecker_db`.
+    :param ft_db: Optional mapping from :func:`~ftready.scraper.fetch_ftchecker_db`.
     :param direct_names: Names not in this set are marked as transitive.
-    :param pypi_fallback: Fall back to PyPI API for packages absent from ft-checker.
-    :param verbose: Print progress to stderr.
-    :return: Sorted list of :class:`PackageResult` — direct deps first.
+    :param pypi_fallback: Query PyPI API for wheel tag detection (default ``True``).
+    :return: Sorted list of :class:`PackageResult` -- direct deps first.
     """
-    results: list[PackageResult] = []
-    fallback: list[tuple[str, str, bool]] = []
+    names = list(deps.keys())
+    today = datetime.now(tz=UTC).strftime("%Y-%m-%d")
 
+    # Step 1 — PyPI as primary source
+    if pypi_fallback and names:
+        sample = ", ".join(names[:8])
+        ellipsis = f", … ({len(names) - 8} more)" if len(names) > 8 else ""
+        _logger.info("[pypi] Querying PyPI for %d packages: %s%s", len(names), sample, ellipsis)
+        pypi_results = check_pypi_batch(names, max_workers=_DEFAULT_MAX_WORKERS)
+    else:
+        pypi_results = {}
+
+    # Step 2 — Build results, enriching with ft-checker when available
+    results: list[PackageResult] = []
     for name, requested in deps.items():
         is_direct = direct_names is None or name in direct_names
-        if entry := ft_db.get(name):
+        pypi = pypi_results.get(name)
+        ft_entry = ft_db.get(name) if ft_db else None
+
+        if ft_entry is not None:
+            # ft-checker data wins: it has actual test results
             results.append(
                 PackageResult(
                     name=name,
                     requested=requested,
-                    status_313t=entry.get("3.13t", STATUS_UNKNOWN),
-                    status_314t=entry.get("3.14t", STATUS_UNKNOWN),
+                    status_313t=ft_entry.get("3.13t", STATUS_UNKNOWN),
+                    status_314t=ft_entry.get("3.14t", STATUS_UNKNOWN),
                     source="ft-checker.com",
-                    checked_at=entry.get("checked_at", ""),
+                    checked_at=ft_entry.get("checked_at", ""),
                     is_direct=is_direct,
                 )
             )
-        elif pypi_fallback:
-            fallback.append((name, requested, is_direct))
+        elif pypi is not None:
+            results.append(
+                PackageResult(
+                    name=name,
+                    requested=requested,
+                    status_313t=pypi["3.13t"],
+                    status_314t=pypi["3.14t"],
+                    source="pypi",
+                    checked_at=today,
+                    is_direct=is_direct,
+                )
+            )
         else:
             results.append(PackageResult(name=name, requested=requested, is_direct=is_direct))
-
-    if fallback:
-        if verbose:
-            sample = ", ".join(n for n, _, _ in fallback[:8])
-            ellipsis = f", … ({len(fallback) - 8} more)" if len(fallback) > 8 else ""
-            print(f"[pypi-fallback] Querying PyPI for {len(fallback)} packages: {sample}{ellipsis}", file=sys.stderr)
-        today = datetime.now(tz=UTC).strftime("%Y-%m-%d")
-        with ThreadPoolExecutor(max_workers=_DEFAULT_MAX_WORKERS) as pool:
-            future_map = {pool.submit(check_pypi_freethreaded, n): (n, req, d) for n, req, d in fallback}
-            for future in as_completed(future_map):
-                name, requested, is_direct = future_map[future]
-                p = future.result()
-                results.append(
-                    PackageResult(
-                        name=name,
-                        requested=requested,
-                        status_313t=p["3.13t"],
-                        status_314t=p["3.14t"],
-                        source="pypi-fallback",
-                        checked_at=today,
-                        is_direct=is_direct,
-                    )
-                )
 
     results.sort(key=lambda r: (not r.is_direct, r.name))
     return results

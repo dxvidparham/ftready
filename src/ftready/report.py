@@ -3,21 +3,16 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from io import StringIO
 from itertools import starmap
 
 from ftready.models import PackageResult, Stats, compute_stats
 
-try:
-    from io import StringIO
+_RICH_AVAILABLE = True
 
-    from rich.console import Console
-    from rich.table import Table
+_ICON = {"Success": "✅", "Failed": "❌", "Unknown": "❓", "Not tested": "⬜"}
 
-    _RICH_AVAILABLE = True
-except ImportError:
-    _RICH_AVAILABLE = False
-
-_ICON = {"Success": "✓", "Failed": "✗", "Unknown": "?", "Not tested": "-"}
+_STYLE = {"Success": "bold green", "Failed": "bold red", "Unknown": "bold yellow", "Not tested": "dim"}
 
 
 def _summary_lines(stats: Stats, *, include_dev: bool, all_deps: bool) -> list[str]:
@@ -37,48 +32,81 @@ def _summary_lines(stats: Stats, *, include_dev: bool, all_deps: bool) -> list[s
     ]
 
 
+def _pct_bar(ok: int, fail: int, total: int) -> str:
+    """Return a rich-markup 3-segment progress bar: green=success, red=failed, dim=untested."""
+    if total == 0:
+        return "[dim]no packages[/dim]"
+    width = 20
+    g = round(ok / total * width)
+    r = round(fail / total * width)
+    d = width - g - r
+    bar = f"[green]{'█' * g}[/green][red]{'█' * r}[/red][dim]{'░' * d}[/dim]"
+    pct_ok = ok / total
+    pct_fail = fail / total
+    untested = total - ok - fail
+    pct_unt = untested / total
+    parts = [
+        bar,
+        f" [green]{ok} ok ({pct_ok:.0%})[/green]",
+        f" [red]{fail} failed ({pct_fail:.0%})[/red]",
+        f" [dim]{untested} untested ({pct_unt:.0%})[/dim]",
+    ]
+    return " ".join(parts)
+
+
 def _row_cells(r: PackageResult, *, all_deps: bool) -> tuple[str, ...]:
     """Return the display cells for one result row."""
     base = (r.name, r.requested, r.status_313t, r.status_314t)
-    tail = ("direct" if r.is_direct else "transitive", r.source, r.checked_at)
-    return (*base, *tail) if all_deps else (*base, r.source, r.checked_at)
+    tail = ("direct" if r.is_direct else "transitive",)
+    return (*base, *tail) if all_deps else base
 
 
 def _header_cells(*, all_deps: bool) -> tuple[str, ...]:
     base = ("Package", "Version / Spec", "3.13t", "3.14t")
-    return (*base, "Type", "Source", "Checked At") if all_deps else (*base, "Source", "Checked At")
+    return (*base, "Type") if all_deps else base
 
 
 def _render_report_rich(results: list[PackageResult], *, include_dev: bool, all_deps: bool) -> str:
     """Render the report using ``rich`` for a styled table."""
-    style_for = {"Success": "green", "Failed": "red", "Unknown": "yellow", "Not tested": "dim"}.get
+    from rich.console import Console
+    from rich.table import Table
+    from rich.text import Text
 
-    title = "Free-threaded Python Compatibility" + (" (all deps)" if all_deps else " (direct deps)")
-    table = Table(title=title, show_header=True, header_style="bold")
+    title = "Free-threaded Python Compatibility"
+    subtitle = "all deps (incl. transitive)" if all_deps else "direct deps only"
+    if include_dev:
+        subtitle += ", dev included"
+
+    table = Table(title=title, caption=subtitle, show_header=True, header_style="bold", padding=(0, 1))
     table.add_column("Package", style="cyan", no_wrap=True)
-    table.add_column("Version / Spec", style="dim")
-    table.add_column("3.13t", justify="center")
-    table.add_column("3.14t", justify="center")
+    table.add_column("Requested", style="dim")
+    table.add_column("3.13t", justify="left")
+    table.add_column("3.14t", justify="left")
     if all_deps:
         table.add_column("Type", style="dim")
-    table.add_column("Source", style="dim")
-    table.add_column("Checked At", style="dim")
 
     for r in results:
 
-        def _cell(s: str) -> str:
-            return f"[{style_for(s, '')}]{_ICON.get(s, '?')} {s}[/]"
+        def _cell(s: str) -> Text:
+            icon = _ICON.get(s, "?")
+            style = _STYLE.get(s, "")
+            return Text(f"{icon} {s}", style=style)
 
-        row: list[str] = [r.name, r.requested, _cell(r.status_313t), _cell(r.status_314t)]
+        row: list[str | Text] = [r.name, r.requested, _cell(r.status_313t), _cell(r.status_314t)]
         if all_deps:
-            row.append("direct" if r.is_direct else "[dim]transitive[/dim]")
-        row += [r.source, r.checked_at]
+            row.append("direct" if r.is_direct else Text("transitive", style="dim"))
         table.add_row(*row)
 
+    stats = compute_stats(results)
+
     buf = StringIO()
-    console = Console(file=buf, width=120, highlight=False)
+    console = Console(file=buf, width=120, highlight=False, force_terminal=True, force_jupyter=False)
     console.print(table)
-    console.print("\n" + "\n".join(_summary_lines(compute_stats(results), include_dev=include_dev, all_deps=all_deps)))
+    console.print()
+    console.print(f"  [bold]3.13t[/bold]  {_pct_bar(stats.ok_313, stats.fail_313, stats.total)}")
+    console.print(f"  [bold]3.14t[/bold]  {_pct_bar(stats.ok_314, stats.fail_314, stats.total)}")
+    console.print()
+    console.print(f"  [dim]{datetime.now(tz=UTC).strftime('%Y-%m-%d %H:%M UTC')}[/dim]")
     return buf.getvalue()
 
 

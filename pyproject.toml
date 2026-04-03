@@ -1,177 +1,184 @@
 [build-system]
-    build-backend = "hatchling.build"
-    requires      = ["hatchling"]
+build-backend = "hatchling.build"
+requires = [ "hatchling" ]
 
 [project]
-    authors = [{ name = "David Anthony Parham" }]
-    classifiers = [
-        "Development Status :: 4 - Beta",
-        "Environment :: Console",
-        "Intended Audience :: Developers",
-        "License :: OSI Approved :: MIT License",
-        "Programming Language :: Python :: 3 :: Only",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "Programming Language :: Python :: 3.13",
-        "Programming Language :: Python :: 3.14",
-        "Topic :: Software Development :: Quality Assurance",
-        "Topic :: Software Development :: Testing",
-        "Typing :: Typed",
-    ]
-    description = "Check if your Python project dependencies are ready for free-threaded Python (3.13t/3.14t)"
-    keywords = ["compatibility", "dependencies", "free-threading", "gil", "nogil"]
-    license = "MIT"
-    name = "ftready"
-    readme = "README.md"
-    requires-python = ">=3.11"
-    version = "0.1.0"
-
-    [project.optional-dependencies]
-        rich = ["rich>=13.0"]
-
-    [project.urls]
-        Homepage   = "https://github.com/dxvidparham/ftready"
-        Repository = "https://github.com/dxvidparham/ftready"
-
-    [project.scripts]
-        ftready = "ftready.cli:main"
-
-[tool.hatch.build.targets.wheel]
-    packages = ["src/ftready"]
-
-[tool.ruff]
-    exclude = ["tests/**"]
-    fix = true
-    format.docstring-code-format = true
-    format.indent-style = "space"
-    format.preview = true
-    format.quote-style = "double"
-    include = ["**/*.py"]
-    line-length = 120
-    lint.fixable = ["ALL"]
-    lint.ignore = [
-        "ANN204",  # missing-return-type-special-method
-        "COM812",  # missing-trailing-comma
-        "D100",    # undocumented-public-module
-        "D104",    # undocumented-public-package
-        "D107",    # undocumented-public-init
-        "D203",    # blank-line-before-class (conflicts with D211)
-        "D212",    # multi-line-summary-first-line (conflicts with D213)
-        "D401",    # non-imperative-mood
-        "PLR2004", # magic-value-comparison
-        "S310",    # suspicious-url-open-usage (we validate URLs)
-        "TRY002",  # raise-vanilla-class
-    ]
-    lint.isort.known-first-party = ["ftready"]
-    lint.mccabe.max-complexity = 15
-    lint.per-file-ignores."scripts/*.py" = ["INP001"]
-    lint.preview = true
-    lint.select = [
-        "A",      # flake8-builtins
-        "ANN",    # type annotations
-        "ARG",    # unused arguments
-        "B",      # flake8-bugbear
-        "C4",     # comprehension rules
-        "C90",    # mccabe complexity
-        "D",      # pydocstyle
-        "DTZ",    # datetime timezone
-        "E",      # pycodestyle
-        "EM",     # error messages
-        "F",      # pyflakes
-        "FURB",   # refurbished
-        "I",      # isort
-        "ICN001", # unconventional import alias
-        "N",      # pep8-naming
-        "PERF",   # perflint
-        "PGH",    # pygrep
-        "PIE",    # misc lints
-        "PT",     # pytest style
-        "PTH",    # pathlib
-        "RET",    # return rules
-        "RSE",    # raise rules
-        "RUF",    # ruff-specific
-        "S",      # bandit security
-        "SIM",    # simplify
-        "TCH",    # type checking
-        "TID",    # tidy imports
-        "TRY",    # tryceratops
-        "UP",     # pyupgrade
-        "W",      # pycodestyle warnings
-    ]
-    lint.unfixable = []
-    target-version = "py311"
-
-[tool.pytest]
-    ini_options.addopts = [
-        "--cov-branch",
-        "--cov-report=html:tests/reports/htmlcov",
-        "--cov-report=term-missing:skip-covered",
-        "--cov-report=xml:tests/reports/coverage.xml",
-        "--cov=ftready",
-        "--strict-config",
-        "--strict-markers",
-        "--timeout=60",
-        "-m",
-        "not slow and not network",
-    ]
-    ini_options.markers = [
-        "network: marks tests that require network access",
-        "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    ]
-    ini_options.minversion = "8.0"
-    ini_options.python_classes = ["Test*"]
-    ini_options.python_files = ["test_*.py"]
-    ini_options.python_functions = ["test_*"]
-    ini_options.testpaths = ["tests"]
-
-[tool.coverage]
-    html.directory = "tests/reports/htmlcov"
-    report.exclude_lines = [
-        "@abc.abstractmethod",
-        "def __repr__",
-        "if TYPE_CHECKING:",
-        "if __name__ == .__main__.:",
-        "pragma: no cover",
-        "raise NotImplementedError",
-    ]
-    report.precision = 2
-    report.show_missing = true
-    run.branch = true
-    run.data_file = "tests/reports/.coverage"
-    run.omit = ["*/__pycache__/*", "*/site-packages/*", "*/test_*.py", "*/tests/*"]
-    run.source = ["ftready"]
-
-[tool.semantic_release]
-    allow_zero_version                         = false
-    branch                                     = "main"
-    branches.main.match                        = "(main|master)"
-    branches.main.prerelease                   = false
-    build_command                              = "uv build"
-    changelog.default_templates.changelog_file = "CHANGELOG.md"
-    changelog.default_templates.output_format  = "md"
-    changelog.mode                             = "update"
-    commit_message                             = "chore(release): {version} [skip ci]"
-    commit_parser                              = "conventional"
-    commit_parser_options.minor_tags           = ["feat", "feature"]
-    commit_parser_options.other_allowed_tags   = ["build", "chore", "ci", "docs", "refactor", "style", "test"]
-    commit_parser_options.patch_tags           = ["fix", "perf"]
-    commit_version_number                      = true
-    major_on_zero                              = true
-    tag_format                                 = "v{version}"
-    upload_to_pypi                             = false
-    upload_to_release                          = true
-    version_source                             = "tag"
-    version_toml                               = ["pyproject.toml:project.version"]
+name = "ftready"
+version = "0.1.0"
+description = "Check if your Python project dependencies are ready for free-threaded Python (3.13t/3.14t)"
+readme = "README.md"
+keywords = [ "compatibility", "dependencies", "free-threading", "gil", "nogil" ]
+license = "MIT"
+authors = [ { name = "David Anthony Parham" } ]
+requires-python = ">=3.11"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Software Development :: Quality Assurance",
+  "Topic :: Software Development :: Testing",
+  "Typing :: Typed",
+]
+dependencies = [ "rich-click>=1.9.7" ]
+urls.Homepage = "https://github.com/dxvidparham/ftready"
+scripts.ftready = "ftready.cli:main"
 
 [dependency-groups]
-    dev = [
-        "prek>=0.2.17",
-        "pytest-cov>=6.1,<7",
-        "pytest-mock>=3.15,<4",
-        "pytest-randomly>=4.0,<5",
-        "pytest-timeout>=2.4,<3",
-        "pytest>=8.3,<9",
-        "python-semantic-release>=10.3,<11",
-        "ruff>=0.14,<1",
-        "ty>=0.0.1a6",
-    ]
+dev = [
+  "prek>=0.2.17",
+  "pyright>=1.1,<2",
+  "pytest>=8.3,<9",
+  "pytest-cov>=6.1,<7",
+  "pytest-mock>=3.15,<4",
+  "pytest-randomly>=4,<5",
+  "pytest-timeout>=2.4,<3",
+  "python-semantic-release>=10.3,<11",
+  "ruff>=0.14,<1",
+]
+
+[tool.hatch]
+build.targets.wheel.packages = [ "src/ftready" ]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+include = [ "**/*.py" ]
+exclude = [ "tests/**" ]
+fix = true
+format.preview = true
+format.indent-style = "space"
+format.quote-style = "double"
+format.docstring-code-format = true
+lint.select = [
+  "A",      # flake8-builtins
+  "ANN",    # type annotations
+  "ARG",    # unused arguments
+  "B",      # flake8-bugbear
+  "C4",     # comprehension rules
+  "C90",    # mccabe complexity
+  "D",      # pydocstyle
+  "DTZ",    # datetime timezone
+  "E",      # pycodestyle
+  "EM",     # error messages
+  "F",      # pyflakes
+  "FURB",   # refurbished
+  "I",      # isort
+  "ICN001", # unconventional import alias
+  "N",      # pep8-naming
+  "PERF",   # perflint
+  "PGH",    # pygrep
+  "PIE",    # misc lints
+  "PT",     # pytest style
+  "PTH",    # pathlib
+  "RET",    # return rules
+  "RSE",    # raise rules
+  "RUF",    # ruff-specific
+  "S",      # bandit security
+  "SIM",    # simplify
+  "TCH",    # type checking
+  "TID",    # tidy imports
+  "TRY",    # tryceratops
+  "UP",     # pyupgrade
+  "W",      # pycodestyle warnings
+]
+lint.ignore = [
+  "ANN204",  # missing-return-type-special-method
+  "COM812",  # missing-trailing-comma
+  "D100",    # undocumented-public-module
+  "D104",    # undocumented-public-package
+  "D107",    # undocumented-public-init
+  "D203",    # blank-line-before-class (conflicts with D211)
+  "D212",    # multi-line-summary-first-line (conflicts with D213)
+  "D401",    # non-imperative-mood
+  "PLR2004", # magic-value-comparison
+  "S310",    # suspicious-url-open-usage (we validate URLs)
+  "TRY002",  # raise-vanilla-class
+]
+lint.per-file-ignores."scripts/*.py" = [ "INP001" ]
+lint.fixable = [ "ALL" ]
+lint.unfixable = []
+lint.isort.known-first-party = [ "ftready" ]
+lint.mccabe.max-complexity = 15
+lint.preview = true
+
+[tool.pyright]
+include = [ "src" ]
+pythonVersion = "3.11"
+typeCheckingMode = "standard"
+
+[tool.pytest]
+ini_options.addopts = [
+  "--cov-branch",
+  "--cov-report=html:tests/reports/htmlcov",
+  "--cov-report=term-missing:skip-covered",
+  "--cov-report=xml:tests/reports/coverage.xml",
+  "--cov=ftready",
+  "--strict-config",
+  "--strict-markers",
+  "--timeout=60",
+  "-m",
+  "not slow and not network",
+]
+ini_options.markers = [
+  "network: marks tests that require network access",
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+ini_options.minversion = "8.0"
+ini_options.python_classes = [ "Test*" ]
+ini_options.python_files = [ "test_*.py" ]
+ini_options.python_functions = [ "test_*" ]
+ini_options.testpaths = [ "tests" ]
+
+[tool.coverage]
+run.branch = true
+run.data_file = "tests/reports/.coverage"
+run.omit = [ "*/__pycache__/*", "*/site-packages/*", "*/test_*.py", "*/tests/*" ]
+run.source = [ "ftready" ]
+report.exclude_lines = [
+  "@abc.abstractmethod",
+  "def __repr__",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+  "pragma: no cover",
+  "raise NotImplementedError",
+]
+report.precision = 2
+report.show_missing = true
+html.directory = "tests/reports/htmlcov"
+
+[tool.semantic_release]
+allow_zero_version = false
+branch = "main"
+branches.main.match = "(main|master)"
+branches.main.prerelease = false
+build_command = "uv build"
+changelog.default_templates.changelog_file = "CHANGELOG.md"
+changelog.default_templates.output_format = "md"
+changelog.exclude_commit_patterns = [
+  "Initial [Cc]ommit.*",
+  "build\\((?!deps\\): .+)",
+  "chore(?:\\([^)]*?\\))?: .+",
+  "ci(?:\\([^)]*?\\))?: .+",
+  "refactor(?:\\([^)]*?\\))?: .+",
+  "style(?:\\([^)]*?\\))?: .+",
+  "test(?:\\([^)]*?\\))?: .+",
+]
+changelog.mode = "update"
+commit_message = "chore(release): {version} [skip ci]"
+commit_parser = "conventional"
+commit_parser_options.minor_tags = [ "feat", "feature" ]
+commit_parser_options.other_allowed_tags = [ "build", "chore", "ci", "docs", "refactor", "style", "test" ]
+commit_parser_options.patch_tags = [ "fix", "perf" ]
+commit_version_number = true
+major_on_zero = true
+tag_format = "v{version}"
+upload_to_pypi = false
+upload_to_release = false
+version_source = "tag"
+version_toml = [ "pyproject.toml:project.version" ]

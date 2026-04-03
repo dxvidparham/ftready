@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-import argparse
+import logging
 import sys
 from pathlib import Path
+
+import rich_click as click
 
 from ftready.checker import build_results
 from ftready.constants import _DEFAULT_CACHE_TTL_HOURS, STATUS_FAILED, STATUS_UNKNOWN
@@ -13,218 +15,192 @@ from ftready.report import generate_report
 from ftready.scraper import fetch_ftchecker_db
 
 
-def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        prog="ftready",
-        description="Check project dependencies for free-threaded Python (3.13t/3.14t) compatibility.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    parser.add_argument(
-        "--pyproject",
-        type=Path,
-        default=Path("pyproject.toml"),
-        help="Path to pyproject.toml.",
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=None,
-        help="Write the report to this file instead of stdout.",
-    )
-    parser.add_argument(
-        "--cache-file",
-        type=Path,
-        default=Path(".ft_cache.json"),
-        help="Path for the ft-checker.com result cache.",
-    )
-    parser.add_argument(
-        "--cache-ttl",
-        type=int,
-        default=_DEFAULT_CACHE_TTL_HOURS,
-        metavar="HOURS",
-        help="Cache TTL in hours before a fresh scrape is triggered.",
-    )
-    parser.add_argument(
-        "--no-cache",
-        action="store_true",
-        help="Ignore and overwrite the existing cache.",
-    )
-    parser.add_argument(
-        "--include-dev",
-        action="store_true",
-        help="Include dev-only dependencies in the report.",
-    )
-    parser.add_argument(
-        "--all-deps",
-        action="store_true",
-        help=(
-            "Check ALL resolved dependencies (direct + transitive) by reading poetry.lock. "
-            "Direct deps are shown first; transitive deps are marked in the Type column."
-        ),
-    )
-    parser.add_argument(
-        "--lock",
-        type=Path,
-        default=None,
-        metavar="LOCK_FILE",
-        help="Path to poetry.lock. Defaults to poetry.lock next to --pyproject. Used with --all-deps.",
-    )
-    parser.add_argument(
-        "--no-pypi-fallback",
-        action="store_true",
-        help="Disable PyPI API fallback for packages absent from ft-checker.",
-    )
-    parser.add_argument(
-        "--plain",
-        action="store_true",
-        help="Force plain-text output even if rich is available.",
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Print progress to stderr.",
-    )
-
-    # --- Input sources ---
-    source_group = parser.add_mutually_exclusive_group()
-    source_group.add_argument(
-        "--requirements",
-        type=Path,
-        default=None,
-        metavar="FILE",
-        help=(
-            "Path to a requirements.txt-style file to check instead of pyproject.toml. "
-            "Can also be a custom dependency file as long as it follows requirements.txt syntax."
-        ),
-    )
-
-    # --- Pre-commit / CI exit-code control ---
-    parser.add_argument(
-        "--fail-on",
-        choices=["never", "failed", "unknown"],
-        default="failed",
-        metavar="{never,failed,unknown}",
-        help=(
-            "When to exit with code 1. "
-            "'failed' (default): at least one direct dep has a Failed status. "
-            "'unknown': Failed or Unknown status. "
-            "'never': always exit 0 (report only)."
-        ),
-    )
-
-    return parser.parse_args(argv)
-
-
-def _resolve_deps(args: argparse.Namespace) -> tuple[dict[str, str], set[str] | None] | int:
+def _resolve_deps(
+    *,
+    requirements: Path | None,
+    pyproject: Path,
+    include_dev: bool,
+    all_deps: bool,
+    lock: Path | None,
+    verbose: bool,
+) -> tuple[dict[str, str], set[str] | None]:
     """
     Load dependencies from the configured source.
 
-    :param args: Parsed CLI arguments.
-    :return: ``(deps, direct_names)`` tuple, or an ``int`` exit code on failure.
+    :param requirements: Optional path to a requirements.txt-style file.
+    :param pyproject: Path to pyproject.toml.
+    :param include_dev: Include dev-only dependencies.
+    :param all_deps: Include transitive dependencies from poetry.lock.
+    :param lock: Optional explicit path to poetry.lock.
+    :param verbose: Print progress to stderr.
+    :return: ``(deps, direct_names)`` tuple.
+    :raises click.UsageError: When a required file is missing.
     """
-    if args.requirements is not None:
-        if not args.requirements.exists():
-            print(f"Error: {args.requirements} not found.", file=sys.stderr)
-            return 2
-        if args.verbose:
-            print(f"[ftready] Reading {args.requirements} …", file=sys.stderr)
-        deps = load_requirements(args.requirements)
-        if args.verbose:
-            print(f"[ftready] Found {len(deps)} packages in {args.requirements}.", file=sys.stderr)
+    if requirements is not None:
+        if verbose:
+            click.echo(f"[ftready] Reading {requirements} …", err=True)
+        deps = load_requirements(requirements)
+        if verbose:
+            click.echo(f"[ftready] Found {len(deps)} packages in {requirements}.", err=True)
         return deps, None
 
-    if not args.pyproject.exists():
-        print(f"Error: {args.pyproject} not found.", file=sys.stderr)
-        return 2
-    if args.verbose:
-        print(f"[ftready] Reading {args.pyproject} …", file=sys.stderr)
+    if not pyproject.exists():
+        msg = f"{pyproject} not found."
+        raise click.UsageError(msg)
+    if verbose:
+        click.echo(f"[ftready] Reading {pyproject} …", err=True)
 
-    direct_deps = load_dependencies(args.pyproject, include_dev=args.include_dev)
+    direct_deps = load_dependencies(pyproject, include_dev=include_dev)
     direct_names = set(direct_deps.keys())
 
-    if args.all_deps:
-        lock_path = args.lock or args.pyproject.parent / "poetry.lock"
+    if all_deps:
+        lock_path = lock or pyproject.parent / "poetry.lock"
         if not lock_path.exists():
-            print(f"Error: {lock_path} not found. Run 'poetry lock' first.", file=sys.stderr)
-            return 2
-        if args.verbose:
-            print(f"[ftready] Reading all deps from {lock_path} …", file=sys.stderr)
+            msg = f"{lock_path} not found. Run 'poetry lock' first."
+            raise click.UsageError(msg)
+        if verbose:
+            click.echo(f"[ftready] Reading all deps from {lock_path} …", err=True)
         deps = load_lockfile_dependencies(lock_path, direct_names)
-        if args.verbose:
+        if verbose:
             transitive = len(deps) - len(direct_names)
-            print(
+            click.echo(
                 f"[ftready] Found {len(deps)} packages in lock file "
                 f"({len(direct_names)} direct, {transitive} transitive).",
-                file=sys.stderr,
+                err=True,
             )
     else:
         deps = direct_deps
-        if args.verbose:
-            dev_note = " (including dev)" if args.include_dev else ""
-            print(f"[ftready] Found {len(deps)} direct dependencies{dev_note}.", file=sys.stderr)
+        if verbose:
+            dev_note = " (including dev)" if include_dev else ""
+            click.echo(f"[ftready] Found {len(deps)} direct dependencies{dev_note}.", err=True)
 
     return deps, direct_names
 
 
-def main(argv: list[str] | None = None) -> int:
-    """
-    Entry point for the free-threaded compatibility checker.
+@click.command(help="Check project dependencies for free-threaded Python (3.13t/3.14t) compatibility.")
+@click.option(
+    "--pyproject",
+    type=click.Path(path_type=Path),
+    default="pyproject.toml",
+    show_default=True,
+    help="Path to pyproject.toml.",
+)
+@click.option("--output", type=click.Path(path_type=Path), default=None, help="Write the report to this file.")
+@click.option(
+    "--cache-file",
+    type=click.Path(path_type=Path),
+    default=".ft_cache.json",
+    show_default=True,
+    help="Path for the ft-checker.com result cache.",
+)
+@click.option(
+    "--cache-ttl",
+    type=int,
+    default=_DEFAULT_CACHE_TTL_HOURS,
+    show_default=True,
+    metavar="HOURS",
+    help="Cache TTL in hours before a fresh scrape is triggered.",
+)
+@click.option("--no-cache", is_flag=True, help="Ignore and overwrite the existing cache.")
+@click.option("--include-dev", is_flag=True, help="Include dev-only dependencies in the report.")
+@click.option(
+    "--all-deps",
+    is_flag=True,
+    help="Check ALL resolved dependencies (direct + transitive) by reading poetry.lock.",
+)
+@click.option(
+    "--lock",
+    type=click.Path(path_type=Path),
+    default=None,
+    metavar="LOCK_FILE",
+    help="Path to poetry.lock. Defaults to poetry.lock next to --pyproject.",
+)
+@click.option("--no-ftchecker", is_flag=True, help="Skip ft-checker.com enrichment (use PyPI only).")
+@click.option("--no-pypi", is_flag=True, help="Skip PyPI wheel tag detection (use ft-checker only).")
+@click.option("--plain", is_flag=True, help="Force plain-text output even if rich is available.")
+@click.option("-v", "--verbose", is_flag=True, help="Print progress to stderr.")
+@click.option(
+    "--requirements",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    metavar="FILE",
+    help="Path to a requirements.txt-style file to check instead of pyproject.toml.",
+)
+@click.option(
+    "--fail-on",
+    type=click.Choice(["never", "failed", "unknown"]),
+    default="failed",
+    show_default=True,
+    help="When to exit with code 1.",
+)
+def main(
+    pyproject: Path,
+    output: Path | None,
+    cache_file: Path,
+    cache_ttl: int,
+    no_cache: bool,
+    include_dev: bool,
+    all_deps: bool,
+    lock: Path | None,
+    no_ftchecker: bool,
+    no_pypi: bool,
+    plain: bool,
+    verbose: bool,
+    requirements: Path | None,
+    fail_on: str,
+) -> None:
+    """Entry point for the free-threaded compatibility checker."""
+    if verbose:
+        logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
 
-    :param argv: Override ``sys.argv`` arguments (useful for testing).
-    :return: Exit code (0 = success, non-zero if any direct dependency has a *Failed* status).
-    """
-    args = _parse_args(argv)
-
-    # ------------------------------------------------------------------ #
-    # Resolve dependencies                                                  #
-    # ------------------------------------------------------------------ #
-    resolved = _resolve_deps(args)
-    if isinstance(resolved, int):
-        return resolved
-    deps, direct_names = resolved
-
-    if args.no_cache and args.cache_file.exists():
-        args.cache_file.unlink()
-
-    ft_db = fetch_ftchecker_db(
-        args.cache_file,
-        ttl_hours=args.cache_ttl,
-        verbose=args.verbose,
+    deps, direct_names = _resolve_deps(
+        requirements=requirements,
+        pyproject=pyproject,
+        include_dev=include_dev,
+        all_deps=all_deps,
+        lock=lock,
+        verbose=verbose,
     )
+
+    if no_cache and cache_file.exists():
+        cache_file.unlink()
+
+    # ft-checker.com is optional enrichment
+    ft_db = None
+    if not no_ftchecker:
+        ft_db = fetch_ftchecker_db(
+            cache_file,
+            ttl_hours=cache_ttl,
+            verbose=verbose,
+        )
 
     results = build_results(
         deps,
         ft_db,
-        direct_names=direct_names if args.all_deps else None,
-        pypi_fallback=not args.no_pypi_fallback,
-        verbose=args.verbose,
+        direct_names=direct_names if all_deps else None,
+        pypi_fallback=not no_pypi,
     )
 
     report = generate_report(
         results,
-        include_dev=args.include_dev,
-        all_deps=args.all_deps,
-        use_rich=not args.plain,
+        include_dev=include_dev,
+        all_deps=all_deps,
+        use_rich=not plain,
     )
 
-    if args.output:
-        args.output.write_text(report, encoding="utf-8")
-        print(f"Report written to {args.output}", file=sys.stderr)
+    if output:
+        output.write_text(report, encoding="utf-8")
+        click.echo(f"Report written to {output}", err=True)
     else:
-        print(report)
+        click.echo(report)
 
-    fail_on = args.fail_on
     if fail_on == "never":
-        return 0
+        return
     statuses_to_flag = {STATUS_FAILED}
     if fail_on == "unknown":
         statuses_to_flag.add(STATUS_UNKNOWN)
     any_direct_bad = any(
         r.is_direct and (r.status_313t in statuses_to_flag or r.status_314t in statuses_to_flag) for r in results
     )
-    return 1 if any_direct_bad else 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    if any_direct_bad:
+        sys.exit(1)

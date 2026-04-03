@@ -1,4 +1,4 @@
-"""Tests for the scraper module — ft-checker.com parsing and PyPI fallback."""
+"""Tests for the scraper module — PyPI primary and ft-checker.com enrichment."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from ftready.scraper import (
     _FTPageParser,
     _load_cache,
     _save_cache,
+    check_pypi_batch,
     check_pypi_freethreaded,
     fetch_ftchecker_db,
 )
@@ -129,6 +130,18 @@ class TestPyPIFallback:
         result = check_pypi_freethreaded("pkg")
         assert result["3.13t"] == STATUS_NOT_TESTED
         assert result["3.14t"] == STATUS_NOT_TESTED
+
+    def test_batch_queries_multiple_packages(self, mocker):
+        mocker.patch(
+            "ftready.scraper.check_pypi_freethreaded",
+            autospec=True,
+            side_effect=lambda pkg: {"3.13t": STATUS_SUCCESS, "3.14t": STATUS_NOT_TESTED}
+            if pkg == "numpy"
+            else {"3.13t": STATUS_NOT_TESTED, "3.14t": STATUS_NOT_TESTED},
+        )
+        results = check_pypi_batch(["numpy", "some-pkg"])
+        assert results["numpy"]["3.13t"] == STATUS_SUCCESS
+        assert results["some-pkg"]["3.13t"] == STATUS_NOT_TESTED
 
 
 class TestCacheTTL:

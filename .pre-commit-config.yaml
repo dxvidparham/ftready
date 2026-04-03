@@ -7,7 +7,7 @@ default_language_version:
 repos:
   # Conventional commit validation
   - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v4.3.0
+    rev: v4.4.0
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]
@@ -24,43 +24,43 @@ repos:
           - chore
           - revert
 
-  # Sanity check for pre-commit hooks and excludes
+    # Sanity check for pre-commit hooks and excludes
   - repo: meta
     hooks:
       - id: check-hooks-apply
       - id: check-useless-excludes
 
-  # Update pre-commit hooks
+    # Update pre-commit hooks
   - repo: https://gitlab.com/vojko.pribudic.foss/pre-commit-update
     rev: v0.9.0
     hooks:
       - id: pre-commit-update
         args: [--verbose, --warnings]
 
-  # Find spelling mistakes in source code
+    # Find spelling mistakes in source code
   - repo: https://github.com/crate-ci/typos
-    rev: v1.43.4
+    rev: v1.45.0
     hooks:
       - id: typos
 
-  # Linting and Formatting
+    # Linting and Formatting
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.1
+    rev: v0.15.9
     hooks:
       - id: ruff-check
         args: [--fix, --unsafe-fixes]
       - id: ruff-format
       - id: ruff-check
 
-  # Type checking
+    # Type checking
   - repo: local
     hooks:
-      - id: ty
-        name: ty
+      - id: pyright
+        name: pyright
         description: Static type checker for Python
-        entry: ty check
+        entry: uv run pyright
         language: system
-        pass_filenames: true
+        pass_filenames: false
         files: \.py$
 
   - repo: https://github.com/pre-commit/mirrors-prettier
@@ -71,11 +71,11 @@ repos:
         args: ["--print-width=120"]
 
   - repo: https://github.com/tox-dev/pyproject-fmt
-    rev: v2.16.0
+    rev: v2.21.0
     hooks:
       - id: pyproject-fmt
 
-  # Miscellaneous
+    # Miscellaneous
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

@@ -1,4 +1,4 @@
-"""Scrape ft-checker.com and query PyPI for free-threaded compatibility data."""
+"""Query PyPI for free-threaded compatibility and optionally enrich from ft-checker.com."""
 
 from __future__ import annotations
 
@@ -28,8 +28,80 @@ from ftready.constants import (
     FTDb,
 )
 
+_logger = logging.getLogger(__name__)
+
+
 # ---------------------------------------------------------------------------
-# ft-checker.com HTML parser
+# HTTP helpers
+# ---------------------------------------------------------------------------
+
+
+def _http_get(url: str) -> str:
+    """Fetch *url* and return decoded body text, or empty string on error."""
+    if not url.startswith(("http:", "https:")):
+        msg = f"Only http/https URLs are permitted, got: {url!r}"
+        raise ValueError(msg)
+    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
+            return resp.read().decode("utf-8", errors="replace")
+    except urllib.error.URLError:
+        _logger.debug("HTTP request failed for %s", url, exc_info=True)
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# PyPI JSON API (primary source)
+# ---------------------------------------------------------------------------
+
+
+def check_pypi_freethreaded(package: str) -> dict[str, str]:
+    """
+    Query the PyPI JSON API to infer free-threaded support from wheel filenames.
+
+    :param package: Normalised package name.
+    :return: ``{"3.13t": status, "3.14t": status}``
+    """
+    url = _PYPI_API.format(package=package)
+    if not url.startswith(("http:", "https:")):
+        return {"3.13t": STATUS_UNKNOWN, "3.14t": STATUS_UNKNOWN}
+    try:
+        with urllib.request.urlopen(url, timeout=_HTTP_TIMEOUT) as resp:
+            data = json.loads(resp.read())
+    except (urllib.error.URLError, json.JSONDecodeError):
+        _logger.debug("PyPI lookup failed for %s", package, exc_info=True)
+        return {"3.13t": STATUS_UNKNOWN, "3.14t": STATUS_UNKNOWN}
+
+    filenames = " ".join(u.get("filename", "") for u in data.get("urls", []))
+    return {
+        "3.13t": STATUS_SUCCESS if "cp313t" in filenames else STATUS_NOT_TESTED,
+        "3.14t": STATUS_SUCCESS if "cp314t" in filenames else STATUS_NOT_TESTED,
+    }
+
+
+def check_pypi_batch(
+    packages: list[str],
+    *,
+    max_workers: int = _DEFAULT_MAX_WORKERS,
+) -> dict[str, dict[str, str]]:
+    """
+    Query PyPI in parallel for multiple packages.
+
+    :param packages: List of normalised package names.
+    :param max_workers: Thread pool size for parallel requests.
+    :return: Mapping from package name to ``{"3.13t": status, "3.14t": status}``.
+    """
+    results: dict[str, dict[str, str]] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        future_map = {pool.submit(check_pypi_freethreaded, pkg): pkg for pkg in packages}
+        for future in future_map:
+            pkg = future_map[future]
+            results[pkg] = future.result()
+    return results
+
+
+# ---------------------------------------------------------------------------
+# ft-checker.com HTML parser (enrichment source)
 # ---------------------------------------------------------------------------
 
 
@@ -37,7 +109,7 @@ class _FTPageParser(HTMLParser):
     """
     Extract compatibility rows from a single ft-checker.com page.
 
-    The page contains two ``<table>`` blocks — one for 3.13t and one for 3.14t.
+    The page contains two ``<table>`` blocks -- one for 3.13t and one for 3.14t.
     Each row carries: package name | latest version | status | details | date.
     """
 
@@ -84,8 +156,13 @@ class _FTPageParser(HTMLParser):
     def _flush_row(self) -> None:
         """Persist a completed table row into :attr:`entries`."""
         row = self._row
-        if len(row) < 3 or not row[0] or self._section is None:
+        if len(row) < 3:
             return
+        if not row[0]:
+            return
+        if self._section is None:
+            return
+        section = self._section
         status = row[2].strip()
         if status not in {STATUS_SUCCESS, STATUS_FAILED}:
             return
@@ -94,30 +171,12 @@ class _FTPageParser(HTMLParser):
             name,
             {"3.13t": STATUS_UNKNOWN, "3.14t": STATUS_UNKNOWN, "checked_at": ""},
         )
-        entry[self._section] = status
+        if section == "3.13t":
+            entry["3.13t"] = status
+        else:
+            entry["3.14t"] = status
         if not entry["checked_at"] and len(row) > 4:
             entry["checked_at"] = row[4].strip()
-
-
-# ---------------------------------------------------------------------------
-# HTTP helpers
-# ---------------------------------------------------------------------------
-
-_logger = logging.getLogger(__name__)
-
-
-def _http_get(url: str) -> str:
-    """Fetch *url* and return decoded body text, or empty string on error."""
-    if not url.startswith(("http:", "https:")):
-        msg = f"Only http/https URLs are permitted, got: {url!r}"
-        raise ValueError(msg)
-    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
-    try:
-        with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
-            return resp.read().decode("utf-8", errors="replace")
-    except urllib.error.URLError:
-        _logger.debug("HTTP request failed for %s", url, exc_info=True)
-        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +216,7 @@ def _load_cache(path: Path) -> tuple[FTDb, str]:
     """
     Load cached ft-checker data.
 
-    :return: ``(entries, fetched_at)`` — *fetched_at* is empty when absent or corrupt.
+    :return: ``(entries, fetched_at)`` -- *fetched_at* is empty when absent or corrupt.
     """
     if not path.exists():
         return {}, ""
@@ -223,32 +282,3 @@ def fetch_ftchecker_db(
 
     _save_cache(cache_file, all_entries)
     return all_entries
-
-
-# ---------------------------------------------------------------------------
-# PyPI fallback
-# ---------------------------------------------------------------------------
-
-
-def check_pypi_freethreaded(package: str) -> dict[str, str]:
-    """
-    Query the PyPI JSON API to infer free-threaded support from wheel filenames.
-
-    :param package: Normalised package name.
-    :return: ``{"3.13t": status, "3.14t": status}``
-    """
-    url = _PYPI_API.format(package=package)
-    if not url.startswith(("http:", "https:")):
-        return {"3.13t": STATUS_UNKNOWN, "3.14t": STATUS_UNKNOWN}
-    try:
-        with urllib.request.urlopen(url, timeout=_HTTP_TIMEOUT) as resp:
-            data = json.loads(resp.read())
-    except (urllib.error.URLError, json.JSONDecodeError):
-        _logger.debug("PyPI lookup failed for %s", package, exc_info=True)
-        return {"3.13t": STATUS_UNKNOWN, "3.14t": STATUS_UNKNOWN}
-
-    filenames = " ".join(u.get("filename", "") for u in data.get("urls", []))
-    return {
-        "3.13t": STATUS_SUCCESS if "cp313t" in filenames else STATUS_NOT_TESTED,
-        "3.14t": STATUS_SUCCESS if "cp314t" in filenames else STATUS_NOT_TESTED,
-    }

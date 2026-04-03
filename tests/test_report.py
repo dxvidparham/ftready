@@ -10,7 +10,7 @@ from ftready.report import generate_report
 class TestComputeStats:
     def test_empty_results(self):
         stats = compute_stats([])
-        assert stats == Stats(0, 0, 0, 0, 0, 0)
+        assert stats == Stats(0, 0, 0, 0, 0, 0, 0, 0)
 
     def test_all_success(self):
         results = [
@@ -75,9 +75,8 @@ class TestGenerateReport:
 
 
 class TestRichReport:
-    def test_rich_report_contains_packages(self, mocker):
-        """When rich is available the report should still contain all package names."""
-        mocker.patch("ftready.report._RICH_AVAILABLE", True)
+    def test_rich_report_contains_packages(self):
+        """Rich is always available — report should contain all package names."""
         results = [
             PackageResult("numpy", ">=1.26", STATUS_SUCCESS, STATUS_SUCCESS, source="ft-checker.com"),
             PackageResult("click", ">=8.0", STATUS_FAILED, STATUS_FAILED, source="ft-checker.com"),
@@ -86,7 +85,7 @@ class TestRichReport:
         assert "numpy" in report
         assert "click" in report
 
-    def test_rich_report_disabled_falls_back_to_plain(self, mocker):
+    def test_rich_report_disabled_falls_back_to_plain(self):
         """When rich is explicitly disabled, plain text should be used."""
         results = [PackageResult("pkg", "1.0", STATUS_SUCCESS, STATUS_UNKNOWN)]
         report = generate_report(results, include_dev=False, use_rich=False)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ftready.constants import STATUS_SUCCESS, STATUS_UNKNOWN
+from ftready.constants import STATUS_FAILED, STATUS_SUCCESS, STATUS_UNKNOWN
 
 
 @dataclass(frozen=True)
@@ -40,18 +40,24 @@ class Stats:
     ok_314: int
     ok_313_direct: int
     ok_314_direct: int
+    fail_313: int
+    fail_314: int
 
 
 def compute_stats(results: list[PackageResult]) -> Stats:
     """Compute all report counters in a single pass over *results*."""
-    total = direct_total = ok_313 = ok_314 = ok_313_direct = ok_314_direct = 0
+    total = direct_total = ok_313 = ok_314 = ok_313_direct = ok_314_direct = fail_313 = fail_314 = 0
     for r in results:
         total += 1
         s13, s14 = r.status_313t == STATUS_SUCCESS, r.status_314t == STATUS_SUCCESS
+        f13 = r.status_313t == STATUS_FAILED
+        f14 = r.status_314t == STATUS_FAILED
         ok_313 += s13
         ok_314 += s14
+        fail_313 += f13
+        fail_314 += f14
         if r.is_direct:
             direct_total += 1
             ok_313_direct += s13
             ok_314_direct += s14
-    return Stats(total, direct_total, ok_313, ok_314, ok_313_direct, ok_314_direct)
+    return Stats(total, direct_total, ok_313, ok_314, ok_313_direct, ok_314_direct, fail_313, fail_314)
