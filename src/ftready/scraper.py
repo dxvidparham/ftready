@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-import sys
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -63,8 +62,6 @@ def check_pypi_freethreaded(package: str) -> dict[str, str]:
     :return: ``{"3.13t": status, "3.14t": status}``
     """
     url = _PYPI_API.format(package=package)
-    if not url.startswith(("http:", "https:")):
-        return {"3.13t": STATUS_UNKNOWN, "3.14t": STATUS_UNKNOWN}
     try:
         with urllib.request.urlopen(url, timeout=_HTTP_TIMEOUT) as resp:
             data = json.loads(resp.read())
@@ -246,7 +243,6 @@ def fetch_ftchecker_db(
     *,
     ttl_hours: int = _DEFAULT_CACHE_TTL_HOURS,
     max_workers: int = _DEFAULT_MAX_WORKERS,
-    verbose: bool = False,
 ) -> FTDb:
     """
     Return a complete ft-checker.com compatibility DB, backed by a local cache.
@@ -254,31 +250,26 @@ def fetch_ftchecker_db(
     :param cache_file: Path to the local JSON cache file.
     :param ttl_hours: Cache TTL in hours before a fresh scrape is triggered.
     :param max_workers: Thread pool size for parallel page fetching.
-    :param verbose: When ``True``, print progress to stderr.
     :return: ``{normalised_name: {"3.13t": status, "3.14t": status, "checked_at": …}}``
     """
     entries, fetched_at = _load_cache(cache_file)
     if fetched_at:
         age = datetime.now(tz=UTC) - datetime.fromisoformat(fetched_at)
         if age < timedelta(hours=ttl_hours):
-            if verbose:
-                print(f"[ftready] Using cached data (age: {age})", file=sys.stderr)
+            _logger.info("[ftready] Using cached data (age: %s)", age)
             return entries
 
-    if verbose:
-        print("[ftready] Scraping ft-checker.com …", file=sys.stderr)
+    _logger.info("[ftready] Scraping ft-checker.com …")
 
     page1_entries, total = _fetch_first_page()
-    if verbose:
-        print(f"[ftready] Fetching pages 2-{total} using up to {max_workers} threads …", file=sys.stderr)
+    _logger.info("[ftready] Fetching pages 2-%d using up to %d threads …", total, max_workers)
 
     all_entries: FTDb = {**page1_entries}
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         for page_data in pool.map(_fetch_page, range(2, total + 1)):
             all_entries.update(page_data)
 
-    if verbose:
-        print(f"[ftready] Found {len(all_entries)} packages.", file=sys.stderr)
+    _logger.info("[ftready] Found %d packages.", len(all_entries))
 
     _save_cache(cache_file, all_entries)
     return all_entries

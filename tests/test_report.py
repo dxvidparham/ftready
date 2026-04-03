@@ -10,7 +10,16 @@ from ftready.report import generate_report
 class TestComputeStats:
     def test_empty_results(self):
         stats = compute_stats([])
-        assert stats == Stats(0, 0, 0, 0, 0, 0, 0, 0)
+        assert stats == Stats(
+            total=0,
+            direct_total=0,
+            ok_313=0,
+            ok_314=0,
+            ok_313_direct=0,
+            ok_314_direct=0,
+            fail_313=0,
+            fail_314=0,
+        )
 
     def test_all_success(self):
         results = [

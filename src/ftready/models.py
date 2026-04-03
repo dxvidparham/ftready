@@ -30,7 +30,7 @@ class PackageResult:
     is_direct: bool = True
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Stats:
     """Pre-computed summary counters for the report footer."""
 
@@ -60,4 +60,13 @@ def compute_stats(results: list[PackageResult]) -> Stats:
             direct_total += 1
             ok_313_direct += s13
             ok_314_direct += s14
-    return Stats(total, direct_total, ok_313, ok_314, ok_313_direct, ok_314_direct, fail_313, fail_314)
+    return Stats(
+        total=total,
+        direct_total=direct_total,
+        ok_313=ok_313,
+        ok_314=ok_314,
+        ok_313_direct=ok_313_direct,
+        ok_314_direct=ok_314_direct,
+        fail_313=fail_313,
+        fail_314=fail_314,
+    )

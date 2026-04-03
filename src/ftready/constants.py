@@ -7,7 +7,12 @@ from typing import TypedDict
 
 _BASE_URL = "https://ft-checker.com"
 _PYPI_API = "https://pypi.org/pypi/{package}/json"
-_USER_AGENT = "ftready/0.1.0"
+try:
+    from importlib.metadata import version as _pkg_version
+
+    _USER_AGENT = f"ftready/{_pkg_version('ftready')}"
+except Exception:
+    _USER_AGENT = "ftready/dev"
 
 
 class Status(enum.StrEnum):

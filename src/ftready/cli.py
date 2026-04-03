@@ -14,6 +14,8 @@ from ftready.parser import load_dependencies, load_lockfile_dependencies, load_r
 from ftready.report import generate_report
 from ftready.scraper import fetch_ftchecker_db
 
+_logger = logging.getLogger(__name__)
+
 
 def _resolve_deps(
     *,
@@ -22,7 +24,6 @@ def _resolve_deps(
     include_dev: bool,
     all_deps: bool,
     lock: Path | None,
-    verbose: bool,
 ) -> tuple[dict[str, str], set[str] | None]:
     """
     Load dependencies from the configured source.
@@ -32,23 +33,19 @@ def _resolve_deps(
     :param include_dev: Include dev-only dependencies.
     :param all_deps: Include transitive dependencies from poetry.lock.
     :param lock: Optional explicit path to poetry.lock.
-    :param verbose: Print progress to stderr.
     :return: ``(deps, direct_names)`` tuple.
     :raises click.UsageError: When a required file is missing.
     """
     if requirements is not None:
-        if verbose:
-            click.echo(f"[ftready] Reading {requirements} …", err=True)
+        _logger.info("[ftready] Reading %s …", requirements)
         deps = load_requirements(requirements)
-        if verbose:
-            click.echo(f"[ftready] Found {len(deps)} packages in {requirements}.", err=True)
+        _logger.info("[ftready] Found %d packages in %s.", len(deps), requirements)
         return deps, None
 
     if not pyproject.exists():
         msg = f"{pyproject} not found."
         raise click.UsageError(msg)
-    if verbose:
-        click.echo(f"[ftready] Reading {pyproject} …", err=True)
+    _logger.info("[ftready] Reading %s …", pyproject)
 
     direct_deps = load_dependencies(pyproject, include_dev=include_dev)
     direct_names = set(direct_deps.keys())
@@ -58,21 +55,19 @@ def _resolve_deps(
         if not lock_path.exists():
             msg = f"{lock_path} not found. Run 'poetry lock' first."
             raise click.UsageError(msg)
-        if verbose:
-            click.echo(f"[ftready] Reading all deps from {lock_path} …", err=True)
+        _logger.info("[ftready] Reading all deps from %s …", lock_path)
         deps = load_lockfile_dependencies(lock_path, direct_names)
-        if verbose:
-            transitive = len(deps) - len(direct_names)
-            click.echo(
-                f"[ftready] Found {len(deps)} packages in lock file "
-                f"({len(direct_names)} direct, {transitive} transitive).",
-                err=True,
-            )
+        transitive = len(deps) - len(direct_names)
+        _logger.info(
+            "[ftready] Found %d packages in lock file (%d direct, %d transitive).",
+            len(deps),
+            len(direct_names),
+            transitive,
+        )
     else:
         deps = direct_deps
-        if verbose:
-            dev_note = " (including dev)" if include_dev else ""
-            click.echo(f"[ftready] Found {len(deps)} direct dependencies{dev_note}.", err=True)
+        dev_note = " (including dev)" if include_dev else ""
+        _logger.info("[ftready] Found %d direct dependencies%s.", len(deps), dev_note)
 
     return deps, direct_names
 
@@ -151,7 +146,7 @@ def main(
 ) -> None:
     """Entry point for the free-threaded compatibility checker."""
     if verbose:
-        logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
+        logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr, force=True)
 
     deps, direct_names = _resolve_deps(
         requirements=requirements,
@@ -159,7 +154,6 @@ def main(
         include_dev=include_dev,
         all_deps=all_deps,
         lock=lock,
-        verbose=verbose,
     )
 
     if no_cache and cache_file.exists():
@@ -171,7 +165,6 @@ def main(
         ft_db = fetch_ftchecker_db(
             cache_file,
             ttl_hours=cache_ttl,
-            verbose=verbose,
         )
 
     results = build_results(

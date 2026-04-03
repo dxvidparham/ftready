@@ -8,8 +8,6 @@ from itertools import starmap
 
 from ftready.models import PackageResult, Stats, compute_stats
 
-_RICH_AVAILABLE = True
-
 _ICON = {"Success": "✅", "Failed": "❌", "Unknown": "❓", "Not tested": "⬜"}
 
 _STYLE = {"Success": "bold green", "Failed": "bold red", "Unknown": "bold yellow", "Not tested": "dim"}
@@ -144,6 +142,6 @@ def generate_report(
     :param use_rich: Try to render with ``rich``; fall back to plain text.
     :return: Formatted report string.
     """
-    if use_rich and _RICH_AVAILABLE:
+    if use_rich:
         return _render_report_rich(results, include_dev=include_dev, all_deps=all_deps)
     return _render_report_plain(results, include_dev=include_dev, all_deps=all_deps)

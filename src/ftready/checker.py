@@ -37,12 +37,15 @@ def build_results(
     names = list(deps.keys())
     today = datetime.now(tz=UTC).strftime("%Y-%m-%d")
 
-    # Step 1 — PyPI as primary source
-    if pypi_fallback and names:
-        sample = ", ".join(names[:8])
-        ellipsis = f", … ({len(names) - 8} more)" if len(names) > 8 else ""
-        _logger.info("[pypi] Querying PyPI for %d packages: %s%s", len(names), sample, ellipsis)
-        pypi_results = check_pypi_batch(names, max_workers=_DEFAULT_MAX_WORKERS)
+    # Only query PyPI for packages NOT already in ft-checker
+    ft_covered = set(ft_db.keys()) if ft_db else set()
+    pypi_needed = [n for n in names if n not in ft_covered] if pypi_fallback else []
+
+    if pypi_needed:
+        sample = ", ".join(pypi_needed[:8])
+        ellipsis = f", … ({len(pypi_needed) - 8} more)" if len(pypi_needed) > 8 else ""
+        _logger.info("[pypi] Querying PyPI for %d packages: %s%s", len(pypi_needed), sample, ellipsis)
+        pypi_results = check_pypi_batch(pypi_needed, max_workers=_DEFAULT_MAX_WORKERS)
     else:
         pypi_results = {}
 
