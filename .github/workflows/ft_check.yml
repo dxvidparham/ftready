@@ -44,13 +44,16 @@ jobs:
                   restore-keys: |
                       ft-checker-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}-
 
-            - name: Set up Python
-              uses: actions/setup-python@v5
+            - name: Install uv
+              uses: astral-sh/setup-uv@v6
               with:
-                  python-version: "3.11"
+                  enable-cache: true
+
+            - name: Set up Python
+              run: uv python install 3.12
 
             - name: Install ftready
-              run: pip install .
+              run: uv sync --all-extras
 
             - name: Run ftready
               id: run-check
@@ -58,7 +61,7 @@ jobs:
                   ARGS="--output ft_report.txt --verbose --plain"
                   if [ "${{ inputs.include_dev }}" = "true" ]; then ARGS="$ARGS --include-dev"; fi
                   if [ "${{ inputs.no_cache }}" = "true" ]; then ARGS="$ARGS --no-cache"; fi
-                  ftready $ARGS
+                  uv run ftready $ARGS
                   echo "exit_code=$?" >> "$GITHUB_OUTPUT"
               continue-on-error: true
 

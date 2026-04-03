@@ -1,0 +1,57 @@
+name: Release
+
+on:
+    workflow_dispatch:
+    push:
+        branches:
+            - main
+        paths-ignore:
+            - "CHANGELOG.md"
+            - "docs/**"
+
+permissions:
+    contents: write
+    id-token: write
+
+jobs:
+    release:
+        name: Semantic release
+        runs-on: ubuntu-latest
+        concurrency:
+            group: release
+            cancel-in-progress: false
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@v6
+              with:
+                  enable-cache: true
+
+            - name: Set up Python
+              run: uv python install
+
+            - name: Install dependencies
+              run: uv sync --group dev
+
+            - name: Python Semantic Release
+              id: release
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  uv run semantic-release version --no-push
+                  if git diff --quiet HEAD; then
+                    echo "released=false" >> "$GITHUB_OUTPUT"
+                    echo "No release needed."
+                  else
+                    git push --follow-tags
+                    VERSION=$(uv run semantic-release version --print)
+                    echo "released=true" >> "$GITHUB_OUTPUT"
+                    echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+                    uv run semantic-release publish
+                  fi

@@ -146,7 +146,7 @@
     branch                                     = "main"
     branches.main.match                        = "(main|master)"
     branches.main.prerelease                   = false
-    build_command                              = ""
+    build_command                              = "uv build"
     changelog.default_templates.changelog_file = "CHANGELOG.md"
     changelog.default_templates.output_format  = "md"
     changelog.mode                             = "update"
