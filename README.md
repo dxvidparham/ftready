@@ -11,6 +11,7 @@
   <a href="https://pypi.org/project/ftready/"><img src="https://img.shields.io/pypi/v/ftready" alt="PyPI version"></a>
   <a href="https://pypi.org/project/ftready/"><img src="https://img.shields.io/pypi/pyversions/ftready" alt="Python versions"></a>
   <a href="https://github.com/dxvidparham/ftready"><img src="https://img.shields.io/badge/coverage-93%25-brightgreen" alt="Coverage"></a>
+  <a href="https://microsoft.github.io/pyright/"><img src="https://img.shields.io/badge/types-pyright-blue" alt="type checked: pyright"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
 </p>
 

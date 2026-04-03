@@ -17,11 +17,8 @@ _NEW_TS = "2025-02-01T00:00:00+00:00"
 def _make_report(
     packages: list[dict],
     *,
-    ok_313: int = 0,
-    ok_314: int = 0,
-    fail_313: int = 0,
-    fail_314: int = 0,
     generated_at: str = _OLD_TS,
+    **counts: int,
 ) -> dict:
     return {
         "generated_at": generated_at,
@@ -30,10 +27,10 @@ def _make_report(
         "summary": {
             "total": len(packages),
             "direct_total": len(packages),
-            "ok_313": ok_313,
-            "ok_314": ok_314,
-            "fail_313": fail_313,
-            "fail_314": fail_314,
+            "ok_313": counts.get("ok_313", 0),
+            "ok_314": counts.get("ok_314", 0),
+            "fail_313": counts.get("fail_313", 0),
+            "fail_314": counts.get("fail_314", 0),
         },
         "packages": packages,
     }
@@ -54,21 +51,17 @@ def _pkg(name: str, s313: str = "Success", s314: str = "Success") -> dict:
 
 def _make_summary(
     packages: list[PackageDiff],
-    *,
-    old_ok_313: int = 0,
-    new_ok_313: int = 0,
-    old_ok_314: int = 0,
-    new_ok_314: int = 0,
+    **counts: int,
 ) -> DiffSummary:
     """Build a DiffSummary with default timestamps."""
     return DiffSummary(
         old_generated_at="2025-01-01",
         new_generated_at="2025-02-01",
         packages=packages,
-        old_ok_313=old_ok_313,
-        new_ok_313=new_ok_313,
-        old_ok_314=old_ok_314,
-        new_ok_314=new_ok_314,
+        old_ok_313=counts.get("old_ok_313", 0),
+        new_ok_313=counts.get("new_ok_313", 0),
+        old_ok_314=counts.get("old_ok_314", 0),
+        new_ok_314=counts.get("new_ok_314", 0),
     )
 
 
