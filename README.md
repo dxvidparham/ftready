@@ -1,103 +1,143 @@
-# ftready
+<h1 align="center">
+  🧵 ftready
+</h1>
 
-[![CI](https://github.com/dxvidparham/ftready/actions/workflows/ci.yml/badge.svg)](https://github.com/dxvidparham/ftready/actions/workflows/ci.yml)
-[![PyPI version](https://img.shields.io/pypi/v/ftready)](https://pypi.org/project/ftready/)
-[![Python versions](https://img.shields.io/pypi/pyversions/ftready)](https://pypi.org/project/ftready/)
-[![Coverage](https://img.shields.io/badge/coverage-89%25-yellowgreen)](https://github.com/dxvidparham/ftready)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<p align="center">
+  <strong>Is your project ready for free-threaded Python? Find out in one command.</strong>
+</p>
 
-Check if your Python project dependencies are ready for **free-threaded Python** (3.13t / 3.14t).
+<p align="center">
+  <a href="https://github.com/dxvidparham/ftready/actions/workflows/ci.yml"><img src="https://github.com/dxvidparham/ftready/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://pypi.org/project/ftready/"><img src="https://img.shields.io/pypi/v/ftready" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/ftready/"><img src="https://img.shields.io/pypi/pyversions/ftready" alt="Python versions"></a>
+  <a href="https://github.com/dxvidparham/ftready"><img src="https://img.shields.io/badge/coverage-92%25-brightgreen" alt="Coverage"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+</p>
 
-Supports `pyproject.toml` (PEP 621 + Poetry), `requirements.txt`, and any custom requirements-style file.
-Queries the **PyPI JSON API** for `cp313t`/`cp314t` wheel tags as the primary source and optionally
-enriches results with [ft-checker.com](https://ft-checker.com) test data.
+<p align="center">
+  <a href="#-quickstart">Quickstart</a> ·
+  <a href="#-features">Features</a> ·
+  <a href="#-usage">Usage</a> ·
+  <a href="#-ci-integration">CI Integration</a> ·
+  <a href="https://pypi.org/project/ftready/">PyPI</a>
+</p>
 
-## Installation
+---
+
+Python 3.13 shipped a **free-threaded build** (`-t` suffix) that disables the GIL — unlocking true multi-core parallelism. But your project is only as ready as its **least-compatible dependency**.
+
+`ftready` scans your dependency tree, queries PyPI for `cp313t`/`cp314t` wheels, cross-references [ft-checker.com](https://ft-checker.com) test results, and tells you exactly where you stand:
+
+```
+ Package          Compatibility   Details
+─────────────────────────────────────────────────────
+ numpy            ✅ Success      free-threaded wheel found
+ pandas           ✅ Success      free-threaded wheel found
+ scipy            ✅ Success      free-threaded wheel found
+ scikit-learn     ✅ Success      free-threaded wheel found
+ matplotlib       ✅ Success      free-threaded wheel found
+ pillow           ✅ Success      free-threaded wheel found
+ opencv-python    ⬜ Not tested
+ tqdm             🐍 Pure Python  likely compatible (no C extensions)
+ loguru           🐍 Pure Python  likely compatible (no C extensions)
+─────────────────────────────────────────────────────
+ ✅ 6 passed · ❌ 0 failed · ⬜ 1 unknown · 🐍 2 pure
+```
+
+## ⚡ Quickstart
 
 ```bash
-# From PyPI (includes rich-click for styled output)
 pip install ftready
-
-# Or via uv
-uv tool install ftready
+ftready
 ```
 
-## Usage
+That's it. Reads your `pyproject.toml` and prints a compatibility report.
+
+## 🎯 Features
+
+- **PyPI-first detection** — queries `cp313t`/`cp314t` wheel tags in parallel for every dependency
+- **Real test results** — enriches with [ft-checker.com](https://ft-checker.com) data covering ~1000 top packages
+- **Pure-Python detection** — flags packages with no C extensions as likely compatible
+- **Every input format** — `pyproject.toml` (PEP 621 + Poetry), `requirements.txt`, `uv.lock`, `poetry.lock`, `pdm.lock`
+- **Full dependency tree** — `--all-deps` scans transitive deps via lock files with pinned-version accuracy
+- **Multiple outputs** — rich tables, plain text, JSON, or CSV
+- **CI-ready** — configurable exit codes (`--fail-on`) to gate or report without blocking
+- **Offline-safe** — `--no-ftchecker` and `--no-pypi` flags for controlled environments
+
+## 📖 Usage
+
+### Input sources
 
 ```bash
-# Check direct dependencies from pyproject.toml (default)
-ftready
-
-# Check a requirements.txt file
-ftready --requirements requirements.txt
-
-# Check a custom dependency file (any requirements-style format)
-ftready --requirements path/to/deps.txt
-
-# Point to a specific pyproject.toml
-ftready --pyproject path/to/pyproject.toml
-
-# Include dev dependencies (pyproject.toml mode only)
-ftready --include-dev
-
-# Check ALL dependencies (direct + transitive via poetry.lock)
-ftready --all-deps
-
-# Write report to file
-ftready --output report.txt
-
-# Force plain-text output (no rich)
-ftready --plain
-
-# Verbose output
-ftready -v
-
-# Force fresh scrape (ignore ft-checker cache)
-ftready --no-cache
-
-# Skip ft-checker.com enrichment (PyPI only)
-ftready --no-ftchecker
-
-# Skip PyPI lookups (ft-checker only)
-ftready --no-pypi
-
-# Exit 0 regardless of results (report only, never block CI)
-ftready --fail-on=never
-
-# Exit 1 if any direct dep is Failed or Unknown
-ftready --fail-on=unknown
+ftready                                    # pyproject.toml in current dir
+ftready --pyproject path/to/pyproject.toml # specific pyproject.toml
+ftready --requirements requirements.txt    # requirements file
+ftready --include-dev                      # include dev dependencies
+ftready --all-deps                         # full tree (auto-detects lock file)
+ftready --all-deps --lock path/to/uv.lock  # specific lock file
 ```
 
-## How It Works
+### Output formats
 
-1. Parses `pyproject.toml` (PEP 621 and Poetry formats) **or** a `requirements.txt`-style file
-2. Queries the **PyPI JSON API** in parallel to detect `cp313t`/`cp314t` wheel tags (primary)
-3. Optionally enriches with [ft-checker.com](https://ft-checker.com) test results (catches failures that wheels alone can't detect)
-4. Renders a styled table showing compatibility status for each dependency
+```bash
+ftready                       # rich table (default)
+ftready --plain               # plain-text table
+ftready --format json         # JSON (for scripting)
+ftready --format csv          # CSV
+ftready --output report.txt   # write to file
+```
 
-## Exit Codes
+### Data source control
 
-| Code | Meaning                                                          |
-| ---- | ---------------------------------------------------------------- |
-| `0`  | No blocking issues found (see `--fail-on` for what counts)       |
-| `1`  | At least one direct dependency has a **Failed** status (default) |
-| `2`  | Configuration error (input file not found, etc.)                 |
+```bash
+ftready --no-ftchecker   # PyPI only (skip ft-checker.com)
+ftready --no-pypi        # ft-checker only (skip PyPI)
+ftready --no-cache       # force fresh ft-checker scrape
+```
 
-Control the exit code threshold with `--fail-on={never,failed,unknown}`.
+### Exit codes
 
-## CI Usage
+| Code | Meaning |
+| ---- | ------- |
+| `0`  | No blocking issues (configurable via `--fail-on`) |
+| `1`  | At least one dependency has a **Failed** status |
+| `2`  | Configuration error (missing input file, etc.) |
 
-Add `ftready` to your GitHub Actions workflow to track free-threaded readiness over time.
-Use `--fail-on=never` to report without blocking the pipeline:
+```bash
+ftready --fail-on=never    # always exit 0 (report only)
+ftready --fail-on=unknown  # exit 1 on Failed OR Unknown
+ftready --fail-on=failed   # exit 1 on Failed only (default)
+```
+
+## 🔄 How It Works
+
+```
+pyproject.toml ─┐
+requirements.txt ┼──▶ Parse ──▶ PyPI API ──▶ ft-checker.com ──▶ Report
+uv.lock ────────┘      │        (parallel)     (optional)        │
+                        │                                         │
+                        └── pinned versions ──▶ exact endpoint    ▼
+                                                              table/json/csv
+```
+
+1. **Parse** — reads your dependency file and extracts package names (+ pinned versions from lock files)
+2. **Query PyPI** — hits `/pypi/{pkg}/json` (or `/pypi/{pkg}/{version}/json` for pinned versions) in parallel
+3. **Detect pure-Python** — flags packages with only `py3-none-any` wheels and no C extensions
+4. **Enrich** — optionally fetches [ft-checker.com](https://ft-checker.com) test results (cached 24h)
+5. **Report** — renders results as a styled table, JSON, or CSV with configurable exit codes
+
+## 🏗 CI Integration
+
+**Report without blocking:**
 
 ```yaml
 - name: Check free-threaded compatibility
   run: |
     pip install ftready
-    ftready --output report.txt --plain --fail-on=never -v
+    ftready --plain --fail-on=never -v
 ```
 
-To fail the build when any dependency is known-incompatible:
+**Gate on failures:**
 
 ```yaml
 - name: Check free-threaded compatibility
@@ -106,28 +146,30 @@ To fail the build when any dependency is known-incompatible:
     ftready --plain -v
 ```
 
-For `requirements.txt` projects:
+**JSON artifact for downstream processing:**
 
 ```yaml
 - name: Check free-threaded compatibility
   run: |
     pip install ftready
-    ftready --requirements requirements.txt --output report.txt --plain -v
+    ftready --format json --output ft-report.json --fail-on=never
+
+- uses: actions/upload-artifact@v4
+  with:
+    name: ft-compat-report
+    path: ft-report.json
 ```
 
-## Data Sources
+## 📊 Data Sources
 
-| Source                                   | Role                                                  | Coverage              |
-| ---------------------------------------- | ----------------------------------------------------- | --------------------- |
-| PyPI JSON API (`/pypi/{pkg}/json`)       | **Primary** — wheel tag detection (`cp313t`/`cp314t`) | Every package on PyPI |
-| [ft-checker.com](https://ft-checker.com) | **Enrichment** — actual test results                  | ~1000 top packages    |
+| Source | Role | Coverage |
+| ------ | ---- | -------- |
+| PyPI JSON API | **Primary** — `cp313t`/`cp314t` wheel tag detection | Every package on PyPI |
+| PyPI version endpoint | **Primary** — pinned-version checking from lock files | Every package on PyPI |
+| [ft-checker.com](https://ft-checker.com) | **Enrichment** — actual test results | ~1000 top packages |
 
-PyPI is queried in parallel for every dependency. ft-checker.com data is cached locally for 24 hours
-(configurable via `--cache-ttl`). The cache path defaults to `.ft_cache.json` and can be changed with `--cache-file`.
+When both sources report on a package, ft-checker.com takes priority — a package may ship free-threaded wheels but still fail tests.
 
-When both sources have data for a package, ft-checker.com takes priority because it has actual test results
-(a package may ship `cp313t` wheels but still fail tests).
+## 📄 License
 
-## License
-
-MIT
+[MIT](LICENSE)
