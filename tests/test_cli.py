@@ -102,3 +102,70 @@ class TestCLI:
         runner = CliRunner(mix_stderr=False)
         result = runner.invoke(main, ["--pyproject", str(sample_pyproject), "--plain", "--verbose"])
         assert "[ftready]" in result.stderr
+
+
+class TestOutputFormats:
+    def test_json_format(self, mocker, sample_pyproject: Path, sample_ft_db):
+        mocker.patch("ftready.cli.fetch_ftchecker_db", autospec=True, return_value=sample_ft_db)
+        mocker.patch(
+            "ftready.cli.build_results",
+            autospec=True,
+            return_value=[PackageResult("numpy", "1.26", STATUS_SUCCESS, STATUS_SUCCESS)],
+        )
+        runner = CliRunner()
+        result = runner.invoke(main, ["--pyproject", str(sample_pyproject), "--format", "json"])
+        assert result.exit_code == 0
+        import json
+
+        data = json.loads(result.output)
+        assert "packages" in data
+        assert data["packages"][0]["name"] == "numpy"
+
+    def test_csv_format(self, mocker, sample_pyproject: Path, sample_ft_db):
+        mocker.patch("ftready.cli.fetch_ftchecker_db", autospec=True, return_value=sample_ft_db)
+        mocker.patch(
+            "ftready.cli.build_results",
+            autospec=True,
+            return_value=[PackageResult("numpy", "1.26", STATUS_SUCCESS, STATUS_SUCCESS)],
+        )
+        runner = CliRunner()
+        result = runner.invoke(main, ["--pyproject", str(sample_pyproject), "--format", "csv"])
+        assert result.exit_code == 0
+        assert "package,requested" in result.output
+        assert "numpy" in result.output
+
+    def test_invalid_format_rejected(self, sample_pyproject: Path):
+        runner = CliRunner()
+        result = runner.invoke(main, ["--pyproject", str(sample_pyproject), "--format", "xml"])
+        assert result.exit_code == 2
+
+
+class TestLockFileAutoDetect:
+    def test_uv_lock_auto_detected(self, mocker, sample_pyproject: Path, sample_ft_db):
+        """When uv.lock exists, it should be auto-detected for --all-deps."""
+        uv_lock = sample_pyproject.parent / "uv.lock"
+        uv_lock.write_text("""\
+[[package]]
+name = "numpy"
+version = "1.26.4"
+
+[[package]]
+name = "requests"
+version = "2.31.0"
+""")
+        mocker.patch("ftready.cli.fetch_ftchecker_db", autospec=True, return_value=sample_ft_db)
+        mocker.patch(
+            "ftready.cli.build_results",
+            autospec=True,
+            return_value=[PackageResult("numpy", "1.26.4", STATUS_SUCCESS, STATUS_SUCCESS)],
+        )
+        runner = CliRunner()
+        result = runner.invoke(main, ["--pyproject", str(sample_pyproject), "--all-deps", "--plain"])
+        assert result.exit_code == 0
+
+    def test_no_lock_file_error(self, mocker, sample_pyproject: Path, sample_ft_db):
+        """When no lock file exists, --all-deps should error."""
+        mocker.patch("ftready.cli.fetch_ftchecker_db", autospec=True, return_value=sample_ft_db)
+        runner = CliRunner()
+        result = runner.invoke(main, ["--pyproject", str(sample_pyproject), "--all-deps"])
+        assert result.exit_code == 2

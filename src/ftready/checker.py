@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import UTC, datetime
 
 from ftready.constants import _DEFAULT_MAX_WORKERS, STATUS_UNKNOWN, FTDb
@@ -10,6 +11,14 @@ from ftready.models import PackageResult
 from ftready.scraper import check_pypi_batch
 
 _logger = logging.getLogger(__name__)
+
+_VERSION_RE = re.compile(r"^(?:↳ )?(\d[\d.]*(?:\.?\w+)*)$")
+
+
+def _extract_pinned_version(requested: str) -> str:
+    """Extract an exact version from a lock-file version string (e.g. ``"↳ 1.26.4"`` → ``"1.26.4"``)."""
+    m = _VERSION_RE.match(requested.strip())
+    return m.group(1) if m else ""
 
 
 def build_results(
@@ -41,11 +50,18 @@ def build_results(
     ft_covered = set(ft_db.keys()) if ft_db else set()
     pypi_needed = [n for n in names if n not in ft_covered] if pypi_fallback else []
 
+    # Extract pinned versions from lock-file deps for version-specific queries
+    pinned_versions: dict[str, str] = {}
+    for name in pypi_needed:
+        ver = _extract_pinned_version(deps[name])
+        if ver:
+            pinned_versions[name] = ver
+
     if pypi_needed:
         sample = ", ".join(pypi_needed[:8])
         ellipsis = f", … ({len(pypi_needed) - 8} more)" if len(pypi_needed) > 8 else ""
         _logger.info("[pypi] Querying PyPI for %d packages: %s%s", len(pypi_needed), sample, ellipsis)
-        pypi_results = check_pypi_batch(pypi_needed, max_workers=_DEFAULT_MAX_WORKERS)
+        pypi_results = check_pypi_batch(pypi_needed, versions=pinned_versions, max_workers=_DEFAULT_MAX_WORKERS)
     else:
         pypi_results = {}
 
@@ -58,6 +74,8 @@ def build_results(
 
         if ft_entry is not None:
             # ft-checker data wins: it has actual test results
+            # still use PyPI pure-python info if available
+            pure = bool(pypi.get("is_pure_python")) if pypi else False
             results.append(
                 PackageResult(
                     name=name,
@@ -67,6 +85,7 @@ def build_results(
                     source="ft-checker.com",
                     checked_at=ft_entry.get("checked_at", ""),
                     is_direct=is_direct,
+                    is_pure_python=pure,
                 )
             )
         elif pypi is not None:
@@ -74,11 +93,12 @@ def build_results(
                 PackageResult(
                     name=name,
                     requested=requested,
-                    status_313t=pypi["3.13t"],
-                    status_314t=pypi["3.14t"],
+                    status_313t=str(pypi["3.13t"]),
+                    status_314t=str(pypi["3.14t"]),
                     source="pypi",
                     checked_at=today,
                     is_direct=is_direct,
+                    is_pure_python=bool(pypi.get("is_pure_python")),
                 )
             )
         else:

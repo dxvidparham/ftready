@@ -57,47 +57,67 @@ def _http_get(url: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def check_pypi_freethreaded(package: str) -> dict[str, str]:
+_PYPI_VERSION_API = "https://pypi.org/pypi/{package}/{version}/json"
+
+
+def _is_pure_python(filenames: list[str]) -> bool:
+    """Return ``True`` if the package only ships pure-Python artifacts (no C extensions)."""
+    wheels = [f for f in filenames if f.endswith(".whl")]
+    if not wheels:
+        return False
+    return all("-none-any.whl" in w for w in wheels)
+
+
+def check_pypi_freethreaded(
+    package: str,
+    version: str = "",
+) -> dict[str, str | bool]:
     """
     Query the PyPI JSON API to infer free-threaded support from wheel filenames.
 
-    Only the **latest release** files are inspected.  If a user pins an older
-    version whose wheel set differs, the result may not reflect that version.
+    When *version* is given the version-specific endpoint is used, otherwise the
+    latest release is inspected.
 
     :param package: Normalised package name.
-    :return: ``{"3.13t": status, "3.14t": status}``
+    :param version: Exact version to check (optional — defaults to latest).
+    :return: ``{"3.13t": status, "3.14t": status, "is_pure_python": bool}``
     """
-    url = _PYPI_API.format(package=package)
+    url = _PYPI_VERSION_API.format(package=package, version=version) if version else _PYPI_API.format(package=package)
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as resp:
             data = json.loads(resp.read())
     except (urllib.error.URLError, json.JSONDecodeError):
         _logger.debug("PyPI lookup failed for %s", package, exc_info=True)
-        return {"3.13t": STATUS_UNKNOWN, "3.14t": STATUS_UNKNOWN}
+        return {"3.13t": STATUS_UNKNOWN, "3.14t": STATUS_UNKNOWN, "is_pure_python": False}
 
-    filenames = " ".join(u.get("filename", "") for u in data.get("urls", []))
+    file_list = [u.get("filename", "") for u in data.get("urls", [])]
+    filenames = " ".join(file_list)
     return {
         "3.13t": STATUS_SUCCESS if "cp313t" in filenames else STATUS_NOT_TESTED,
         "3.14t": STATUS_SUCCESS if "cp314t" in filenames else STATUS_NOT_TESTED,
+        "is_pure_python": _is_pure_python(file_list),
     }
 
 
 def check_pypi_batch(
     packages: list[str],
     *,
+    versions: dict[str, str] | None = None,
     max_workers: int = _DEFAULT_MAX_WORKERS,
-) -> dict[str, dict[str, str]]:
+) -> dict[str, dict[str, str | bool]]:
     """
     Query PyPI in parallel for multiple packages.
 
     :param packages: List of normalised package names.
+    :param versions: Optional mapping of package name to pinned version.
     :param max_workers: Thread pool size for parallel requests.
-    :return: Mapping from package name to ``{"3.13t": status, "3.14t": status}``.
+    :return: Mapping from package name to ``{"3.13t": status, "3.14t": status, "is_pure_python": bool}``.
     """
-    results: dict[str, dict[str, str]] = {}
+    ver = versions or {}
+    results: dict[str, dict[str, str | bool]] = {}
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        future_map = {pool.submit(check_pypi_freethreaded, pkg): pkg for pkg in packages}
+        future_map = {pool.submit(check_pypi_freethreaded, pkg, ver.get(pkg, "")): pkg for pkg in packages}
         for future in future_map:
             pkg = future_map[future]
             results[pkg] = future.result()

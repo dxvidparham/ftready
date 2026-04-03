@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ftready.checker import build_results
+from ftready.checker import _extract_pinned_version, build_results
 from ftready.constants import STATUS_FAILED, STATUS_SUCCESS, STATUS_UNKNOWN
 
 
@@ -87,3 +87,58 @@ class TestBuildResults:
 
         names = [r.name for r in results]
         assert names == sorted(names)
+
+
+class TestExtractPinnedVersion:
+    def test_exact_version(self):
+        assert _extract_pinned_version("1.26.4") == "1.26.4"
+
+    def test_transitive_prefix(self):
+        assert _extract_pinned_version("↳ 2.2.1") == "2.2.1"
+
+    def test_version_spec_not_pinned(self):
+        assert _extract_pinned_version(">=1.26") == ""
+
+    def test_empty_string(self):
+        assert _extract_pinned_version("") == ""
+
+    def test_prerelease(self):
+        assert _extract_pinned_version("1.0.0rc1") == "1.0.0rc1"
+
+    def test_local_path(self):
+        assert _extract_pinned_version("(local path)") == ""
+
+
+class TestIsPurePythonPassthrough:
+    def test_pypi_pure_python_propagated(self, mocker):
+        """is_pure_python from PyPI should be propagated to PackageResult."""
+        mocker.patch(
+            "ftready.checker.check_pypi_batch",
+            autospec=True,
+            return_value={"click": {"3.13t": STATUS_SUCCESS, "3.14t": STATUS_SUCCESS, "is_pure_python": True}},
+        )
+        deps = {"click": ">=8.0"}
+        results = build_results(deps, None, pypi_fallback=True)
+        assert results[0].is_pure_python is True
+
+    def test_pypi_not_pure_python(self, mocker):
+        mocker.patch(
+            "ftready.checker.check_pypi_batch",
+            autospec=True,
+            return_value={"numpy": {"3.13t": STATUS_SUCCESS, "3.14t": STATUS_SUCCESS, "is_pure_python": False}},
+        )
+        deps = {"numpy": ">=1.26"}
+        results = build_results(deps, None, pypi_fallback=True)
+        assert results[0].is_pure_python is False
+
+    def test_pinned_versions_passed_to_batch(self, mocker):
+        """Lock-file pinned versions should be extracted and passed to check_pypi_batch."""
+        mock_batch = mocker.patch(
+            "ftready.checker.check_pypi_batch",
+            autospec=True,
+            return_value={"pkg": {"3.13t": STATUS_SUCCESS, "3.14t": STATUS_SUCCESS, "is_pure_python": False}},
+        )
+        deps = {"pkg": "1.2.3"}
+        build_results(deps, None, pypi_fallback=True)
+        call_kwargs = mock_batch.call_args
+        assert call_kwargs.kwargs["versions"] == {"pkg": "1.2.3"}

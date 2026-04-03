@@ -9,6 +9,7 @@ from pathlib import Path
 from ftready.constants import STATUS_NOT_TESTED, STATUS_SUCCESS
 from ftready.scraper import (
     _FTPageParser,
+    _is_pure_python,
     _load_cache,
     _save_cache,
     check_pypi_batch,
@@ -135,9 +136,13 @@ class TestPyPIFallback:
         mocker.patch(
             "ftready.scraper.check_pypi_freethreaded",
             autospec=True,
-            side_effect=lambda pkg: {"3.13t": STATUS_SUCCESS, "3.14t": STATUS_NOT_TESTED}
+            side_effect=lambda pkg, version="": {
+                "3.13t": STATUS_SUCCESS,
+                "3.14t": STATUS_NOT_TESTED,
+                "is_pure_python": False,
+            }
             if pkg == "numpy"
-            else {"3.13t": STATUS_NOT_TESTED, "3.14t": STATUS_NOT_TESTED},
+            else {"3.13t": STATUS_NOT_TESTED, "3.14t": STATUS_NOT_TESTED, "is_pure_python": False},
         )
         results = check_pypi_batch(["numpy", "some-pkg"])
         assert results["numpy"]["3.13t"] == STATUS_SUCCESS
@@ -191,3 +196,80 @@ class TestCacheTTL:
         mocker.patch("ftready.scraper._http_get", autospec=True, return_value=page_html)
         result = fetch_ftchecker_db(missing, ttl_hours=24)
         assert "new-pkg" in result
+
+
+class TestIsPurePython:
+    """Tests for the _is_pure_python helper."""
+
+    def test_pure_python_wheels(self):
+        filenames = ["pkg-1.0-py3-none-any.whl", "pkg-1.0.tar.gz"]
+        assert _is_pure_python(filenames) is True
+
+    def test_native_wheel(self):
+        filenames = ["pkg-1.0-cp313-cp313t-manylinux_2_17_x86_64.whl", "pkg-1.0.tar.gz"]
+        assert _is_pure_python(filenames) is False
+
+    def test_mixed_wheels(self):
+        filenames = ["pkg-1.0-py3-none-any.whl", "pkg-1.0-cp313-cp313-manylinux.whl"]
+        assert _is_pure_python(filenames) is False
+
+    def test_no_wheels_only_sdist(self):
+        filenames = ["pkg-1.0.tar.gz"]
+        assert _is_pure_python(filenames) is False
+
+    def test_empty_filenames(self):
+        assert _is_pure_python([]) is False
+
+
+class TestPinnedVersionQuery:
+    """Tests for pinned-version PyPI queries."""
+
+    def test_version_specific_url_used(self, mocker):
+        """When a version is given, the version-specific API endpoint is used."""
+        mock_data = {
+            "urls": [
+                {"filename": "pkg-1.2.3-cp313-cp313t-manylinux_2_17_x86_64.whl"},
+            ]
+        }
+        mock_urlopen = mocker.patch(
+            "ftready.scraper.urllib.request.urlopen",
+            autospec=True,
+            return_value=mocker.MagicMock(
+                __enter__=mocker.MagicMock(
+                    return_value=mocker.MagicMock(read=mocker.MagicMock(return_value=json.dumps(mock_data).encode()))
+                ),
+                __exit__=mocker.MagicMock(return_value=False),
+            ),
+        )
+        result = check_pypi_freethreaded("pkg", "1.2.3")
+        assert result["3.13t"] == STATUS_SUCCESS
+        # Verify the URL includes the version
+        call_args = mock_urlopen.call_args
+        req = call_args[0][0]
+        assert "1.2.3" in req.full_url
+
+    def test_returns_is_pure_python(self, mocker):
+        """Result dict includes is_pure_python field."""
+        mock_data = {"urls": [{"filename": "pkg-1.0-py3-none-any.whl"}]}
+        mocker.patch(
+            "ftready.scraper.urllib.request.urlopen",
+            autospec=True,
+            return_value=mocker.MagicMock(
+                __enter__=mocker.MagicMock(
+                    return_value=mocker.MagicMock(read=mocker.MagicMock(return_value=json.dumps(mock_data).encode()))
+                ),
+                __exit__=mocker.MagicMock(return_value=False),
+            ),
+        )
+        result = check_pypi_freethreaded("pkg")
+        assert result["is_pure_python"] is True
+
+    def test_batch_passes_versions(self, mocker):
+        """check_pypi_batch passes pinned versions through to individual checks."""
+        mock_check = mocker.patch(
+            "ftready.scraper.check_pypi_freethreaded",
+            autospec=True,
+            return_value={"3.13t": STATUS_SUCCESS, "3.14t": STATUS_NOT_TESTED, "is_pure_python": False},
+        )
+        check_pypi_batch(["numpy"], versions={"numpy": "1.26.4"})
+        mock_check.assert_called_once_with("numpy", "1.26.4")

@@ -16,9 +16,10 @@ class PackageResult:
     :param requested: Version constraint / resolved version string.
     :param status_313t: ft-checker.com / PyPI status for Python 3.13t.
     :param status_314t: ft-checker.com / PyPI status for Python 3.14t.
-    :param source: Data source (``"ft-checker.com"``, ``"pypi-fallback"``, or ``"not-found"``).
+    :param source: Data source (``"ft-checker.com"``, ``"pypi"``, or ``"not-found"``).
     :param checked_at: ISO-8601 timestamp or date of last verification.
     :param is_direct: ``True`` for direct project dependencies; ``False`` for transitive.
+    :param is_pure_python: ``True`` when PyPI only has pure-Python wheels (no C extensions).
     """
 
     name: str
@@ -28,6 +29,7 @@ class PackageResult:
     source: str = "not-found"
     checked_at: str = ""
     is_direct: bool = True
+    is_pure_python: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)

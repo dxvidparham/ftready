@@ -5,16 +5,42 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import rich_click as click
 
 from ftready.checker import build_results
 from ftready.constants import _DEFAULT_CACHE_TTL_HOURS, STATUS_FAILED, STATUS_UNKNOWN
-from ftready.parser import load_dependencies, load_lockfile_dependencies, load_requirements
+from ftready.parser import load_dependencies, load_lockfile_dependencies, load_requirements, load_uv_lock_dependencies
 from ftready.report import generate_report
 from ftready.scraper import fetch_ftchecker_db
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 _logger = logging.getLogger(__name__)
+
+_LOCK_FILE_NAMES = ("uv.lock", "poetry.lock", "pdm.lock")
+
+
+def _find_lock_file(project_dir: Path) -> Path | None:
+    """Auto-detect the first available lock file in *project_dir*."""
+    for name in _LOCK_FILE_NAMES:
+        candidate = project_dir / name
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _lock_loader_for(
+    lock_path: Path,
+) -> Callable[[Path, set[str]], dict[str, str]]:
+    """Return the appropriate lock-file parser for *lock_path*."""
+    name = lock_path.name
+    if name == "uv.lock":
+        return load_uv_lock_dependencies
+    # poetry.lock and pdm.lock share the same [[package]] TOML structure
+    return load_lockfile_dependencies
 
 
 def _resolve_deps(
@@ -51,12 +77,16 @@ def _resolve_deps(
     direct_names = set(direct_deps.keys())
 
     if all_deps:
-        lock_path = lock or pyproject.parent / "poetry.lock"
+        lock_path = lock or _find_lock_file(pyproject.parent)
+        if lock_path is None:
+            msg = "No lock file found (tried uv.lock, poetry.lock, pdm.lock). Create one first."
+            raise click.UsageError(msg)
         if not lock_path.exists():
-            msg = f"{lock_path} not found. Run 'poetry lock' first."
+            msg = f"{lock_path} not found."
             raise click.UsageError(msg)
         _logger.info("[ftready] Reading all deps from %s …", lock_path)
-        deps = load_lockfile_dependencies(lock_path, direct_names)
+        loader = _lock_loader_for(lock_path)
+        deps = loader(lock_path, direct_names)
         transitive = len(deps) - len(direct_names)
         _logger.info(
             "[ftready] Found %d packages in lock file (%d direct, %d transitive).",
@@ -101,18 +131,26 @@ def _resolve_deps(
 @click.option(
     "--all-deps",
     is_flag=True,
-    help="Check ALL resolved dependencies (direct + transitive) by reading poetry.lock.",
+    help="Check ALL resolved dependencies (direct + transitive) from lock file (uv.lock/poetry.lock/pdm.lock).",
 )
 @click.option(
     "--lock",
     type=click.Path(path_type=Path),
     default=None,
     metavar="LOCK_FILE",
-    help="Path to poetry.lock. Defaults to poetry.lock next to --pyproject.",
+    help="Explicit path to lock file. Auto-detects uv.lock, poetry.lock, or pdm.lock when omitted.",
 )
 @click.option("--no-ftchecker", is_flag=True, help="Skip ft-checker.com enrichment (use PyPI only).")
 @click.option("--no-pypi", is_flag=True, help="Skip PyPI wheel tag detection (use ft-checker only).")
 @click.option("--plain", is_flag=True, help="Force plain-text output even if rich is available.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json", "csv"]),
+    default="table",
+    show_default=True,
+    help="Output format: rich/plain table, JSON, or CSV.",
+)
 @click.option("-v", "--verbose", is_flag=True, help="Print progress to stderr.")
 @click.option(
     "--requirements",
@@ -140,6 +178,7 @@ def main(
     no_ftchecker: bool,
     no_pypi: bool,
     plain: bool,
+    output_format: str,
     verbose: bool,
     requirements: Path | None,
     fail_on: str,
@@ -178,6 +217,7 @@ def main(
         results,
         include_dev=include_dev,
         all_deps=all_deps,
+        output_format=output_format,
         use_rich=not plain,
     )
 

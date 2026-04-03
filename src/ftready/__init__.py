@@ -3,7 +3,7 @@
 from ftready.checker import build_results
 from ftready.constants import Status
 from ftready.models import PackageResult
-from ftready.parser import load_dependencies, load_lockfile_dependencies, load_requirements
+from ftready.parser import load_dependencies, load_lockfile_dependencies, load_requirements, load_uv_lock_dependencies
 from ftready.report import generate_report
 from ftready.scraper import check_pypi_batch, fetch_ftchecker_db
 
@@ -17,4 +17,5 @@ __all__ = [
     "load_dependencies",
     "load_lockfile_dependencies",
     "load_requirements",
+    "load_uv_lock_dependencies",
 ]

@@ -75,6 +75,36 @@ def load_lockfile_dependencies(
     return result
 
 
+def load_uv_lock_dependencies(
+    lock_path: Path,
+    direct_names: set[str],
+) -> dict[str, str]:
+    """
+    Parse ``uv.lock`` and return a mapping of every resolved package to its pinned version.
+
+    The uv.lock format uses ``[[package]]`` TOML array-of-tables with ``name`` and
+    ``version`` keys, plus an optional ``dev`` array of ``{name = "..."}`` dicts.
+
+    :param lock_path: Path to the ``uv.lock`` file.
+    :param direct_names: Set of normalised direct-dependency names.
+    :return: ``{normalised_package_name: resolved_version}`` for every package in the lock file.
+    """
+    with lock_path.open("rb") as fh:
+        data = tomllib.load(fh)
+
+    result: dict[str, str] = {}
+    for pkg in data.get("package", []):
+        raw_name = pkg.get("name", "")
+        if not raw_name:
+            continue
+        name = _normalise_name(raw_name)
+        version = pkg.get("version", "")
+        prefix = "" if name in direct_names else "↳ "
+        result[name] = f"{prefix}{version}"
+
+    return result
+
+
 def load_requirements(path: Path) -> dict[str, str]:
     """
     Parse a ``requirements.txt``-style file and return a dependency mapping.

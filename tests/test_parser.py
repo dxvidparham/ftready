@@ -10,6 +10,7 @@ from ftready.parser import (
     load_dependencies,
     load_lockfile_dependencies,
     load_requirements,
+    load_uv_lock_dependencies,
 )
 
 
@@ -147,3 +148,104 @@ class TestLoadRequirements:
         req.write_text("package[extra1,extra2]>=1.0\n")
         deps = load_requirements(req)
         assert "package" in deps
+
+
+class TestLoadUvLockDependencies:
+    def _write_uv_lock(self, tmp_path: Path, content: str) -> Path:
+        lock = tmp_path / "uv.lock"
+        lock.write_text(content)
+        return lock
+
+    def test_loads_all_packages(self, tmp_path: Path):
+        lock = self._write_uv_lock(
+            tmp_path,
+            """\
+[[package]]
+name = "numpy"
+version = "1.26.4"
+
+[[package]]
+name = "requests"
+version = "2.31.0"
+
+[[package]]
+name = "urllib3"
+version = "2.2.1"
+""",
+        )
+        direct = {"numpy", "requests"}
+        deps = load_uv_lock_dependencies(lock, direct)
+        assert "numpy" in deps
+        assert "requests" in deps
+        assert "urllib3" in deps
+
+    def test_marks_transitive_with_prefix(self, tmp_path: Path):
+        lock = self._write_uv_lock(
+            tmp_path,
+            """\
+[[package]]
+name = "numpy"
+version = "1.26.4"
+
+[[package]]
+name = "urllib3"
+version = "2.2.1"
+""",
+        )
+        direct = {"numpy"}
+        deps = load_uv_lock_dependencies(lock, direct)
+        assert deps["numpy"] == "1.26.4"
+        assert deps["urllib3"].startswith("↳")
+
+    def test_normalises_names(self, tmp_path: Path):
+        lock = self._write_uv_lock(
+            tmp_path,
+            """\
+[[package]]
+name = "Scikit_Learn"
+version = "1.4.0"
+""",
+        )
+        deps = load_uv_lock_dependencies(lock, {"scikit-learn"})
+        assert "scikit-learn" in deps
+
+    def test_empty_lock(self, tmp_path: Path):
+        lock = self._write_uv_lock(tmp_path, "")
+        deps = load_uv_lock_dependencies(lock, set())
+        assert deps == {}
+
+    def test_skips_packages_without_name(self, tmp_path: Path):
+        lock = self._write_uv_lock(
+            tmp_path,
+            """\
+[[package]]
+version = "1.0.0"
+
+[[package]]
+name = "valid-pkg"
+version = "2.0.0"
+""",
+        )
+        deps = load_uv_lock_dependencies(lock, {"valid-pkg"})
+        assert len(deps) == 1
+        assert "valid-pkg" in deps
+
+
+class TestPdmLockParsing:
+    """pdm.lock shares the same TOML [[package]] structure as poetry.lock."""
+
+    def test_loads_pdm_lock(self, tmp_path: Path):
+        lock = tmp_path / "pdm.lock"
+        lock.write_text("""\
+[[package]]
+name = "click"
+version = "8.1.7"
+
+[[package]]
+name = "rich"
+version = "13.7.0"
+""")
+        direct = {"click"}
+        deps = load_lockfile_dependencies(lock, direct)
+        assert deps["click"] == "8.1.7"
+        assert deps["rich"].startswith("↳")
