@@ -26,7 +26,7 @@
 
 ---
 
-[PEP 703](https://peps.python.org/pep-0703/) introduced a **free-threaded build** of CPython (3.13t / 3.14t) that disables the GIL — unlocking true multi-core parallelism. But your project is only as ready as its **least-compatible dependency**. See the [CPython free-threading docs](https://docs.python.org/3.14/whatsnew/3.13.html#free-threaded-cpython) for background.
+[PEP 703](https://peps.python.org/pep-0703/) introduced a **free-threaded build** of CPython (3.13t) that disables the GIL — unlocking true multi-core parallelism. [PEP 779](https://peps.python.org/pep-0779/) made free-threading a **supported** (no longer experimental) feature in CPython 3.14. But your project is only as ready as its **least-compatible dependency**. See the [free-threading guide](https://py-free-threading.github.io/) for background.
 
 `ftready` scans your dependency tree, queries PyPI for `cp313t`/`cp314t` wheels, cross-references [ft-checker.com](https://ft-checker.com) test results, and tells you exactly where you stand:
 
@@ -246,6 +246,11 @@ print(format_diff(summary))
 | [ft-checker.com](https://ft-checker.com) | **Enrichment** — actual test results                  | ~1000 top packages    |
 
 When both sources report on a package, ft-checker.com takes priority — a package may ship free-threaded wheels but still fail tests.
+
+### Related resources
+
+- [py-free-threading.github.io](https://py-free-threading.github.io/) — official porting guide, C-API status, and ecosystem tracker
+- [hugovk.dev/free-threaded-wheels](https://hugovk.dev/free-threaded-wheels/) — auto-updated dashboard of the top 360 packages with free-threaded wheels
 
 ## ⚠️ Limitations
 

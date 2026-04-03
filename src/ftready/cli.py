@@ -12,7 +12,7 @@ import rich_click as click
 from ftready.checker import build_results
 from ftready.constants import _DEFAULT_CACHE_TTL_HOURS, STATUS_FAILED, STATUS_UNKNOWN
 from ftready.diff import diff_reports, format_diff, format_diff_json
-from ftready.parser import load_dependencies, load_lockfile_dependencies, load_requirements, load_uv_lock_dependencies
+from ftready.parser import load_dependencies, load_lockfile_dependencies, load_requirements
 from ftready.report import generate_report
 from ftready.scraper import fetch_ftchecker_db
 
@@ -34,13 +34,9 @@ def _find_lock_file(project_dir: Path) -> Path | None:
 
 
 def _lock_loader_for(
-    lock_path: Path,
+    lock_path: Path,  # noqa: ARG001
 ) -> Callable[[Path, set[str]], dict[str, str]]:
-    """Return the appropriate lock-file parser for *lock_path*."""
-    name = lock_path.name
-    if name == "uv.lock":
-        return load_uv_lock_dependencies
-    # poetry.lock and pdm.lock share the same [[package]] TOML structure
+    """Return the lock-file parser (all formats share the same ``[[package]]`` structure)."""
     return load_lockfile_dependencies
 
 
@@ -110,8 +106,13 @@ class _DefaultGroup(click.RichGroup):
 
     def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
         """Prepend the default subcommand when args don't start with a known command."""
-        if not args or args[0] not in self.commands:
+        if args and args[0] not in self.commands and not args[0].startswith("-"):
             args = [self.default_cmd_name, *args]
+        elif args and args[0] not in self.commands:
+            # Flags like --plain go to the default subcommand
+            args = [self.default_cmd_name, *args]
+        elif not args:
+            args = [self.default_cmd_name]
         return super().parse_args(ctx, args)
 
 

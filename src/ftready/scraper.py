@@ -65,7 +65,7 @@ def _is_pure_python(filenames: list[str]) -> bool:
     wheels = [f for f in filenames if f.endswith(".whl")]
     if not wheels:
         return False
-    return all("-none-any.whl" in w for w in wheels)
+    return all(w.endswith("-none-any.whl") for w in wheels)
 
 
 def check_pypi_freethreaded(
@@ -92,10 +92,11 @@ def check_pypi_freethreaded(
         return {"3.13t": STATUS_UNKNOWN, "3.14t": STATUS_UNKNOWN, "is_pure_python": False}
 
     file_list = [u.get("filename", "") for u in data.get("urls", [])]
-    filenames = " ".join(file_list)
+    has_313t = any("cp313t" in f for f in file_list)
+    has_314t = any("cp314t" in f for f in file_list)
     return {
-        "3.13t": STATUS_SUCCESS if "cp313t" in filenames else STATUS_NOT_TESTED,
-        "3.14t": STATUS_SUCCESS if "cp314t" in filenames else STATUS_NOT_TESTED,
+        "3.13t": STATUS_SUCCESS if has_313t else STATUS_NOT_TESTED,
+        "3.14t": STATUS_SUCCESS if has_314t else STATUS_NOT_TESTED,
         "is_pure_python": _is_pure_python(file_list),
     }
 
@@ -120,7 +121,11 @@ def check_pypi_batch(
         future_map = {pool.submit(check_pypi_freethreaded, pkg, ver.get(pkg, "")): pkg for pkg in packages}
         for future in future_map:
             pkg = future_map[future]
-            results[pkg] = future.result()
+            try:
+                results[pkg] = future.result()
+            except Exception:
+                _logger.debug("PyPI batch query failed for %s", pkg, exc_info=True)
+                results[pkg] = {"3.13t": STATUS_UNKNOWN, "3.14t": STATUS_UNKNOWN, "is_pure_python": False}
     return results
 
 
