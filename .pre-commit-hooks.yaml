@@ -1,0 +1,23 @@
+- id: ftready
+  name: Free-threaded Python compatibility check (pyproject.toml)
+  description: >
+    Check pyproject.toml dependencies for free-threaded Python (3.13t/3.14t)
+    compatibility using ft-checker.com data and PyPI wheel tags.
+  entry: ftready
+  language: python
+  types: [toml]
+  files: ^pyproject\.toml$
+  pass_filenames: false
+  args: [--fail-on=failed]
+
+- id: ftready-requirements
+  name: Free-threaded Python compatibility check (requirements.txt)
+  description: >
+    Check requirements.txt (or any requirements-style file) for free-threaded
+    Python (3.13t/3.14t) compatibility.
+  entry: ftready
+  language: python
+  types_or: [text]
+  files: ^requirements.*\.txt$
+  pass_filenames: false
+  args: [--requirements, requirements.txt, --fail-on=failed]

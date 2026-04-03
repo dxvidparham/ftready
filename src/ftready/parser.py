@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
-import tomllib
 from pathlib import Path
+
+import tomllib
 
 
 def _normalise_name(name: str) -> str:
@@ -67,6 +68,30 @@ def load_lockfile_dependencies(
         prefix = "" if name in direct_names else "↳ "
         result[name] = f"{prefix}{version}"
 
+    return result
+
+
+def load_requirements(path: Path) -> dict[str, str]:
+    """Parse a ``requirements.txt``-style file and return a dependency mapping.
+
+    Handles inline comments, version specifiers, extras, environment markers,
+    and skips directives (``-r``, ``-c``, ``-e``, ``--index-url``, etc.).
+
+    :param path: Path to the requirements file.
+    :return: ``{normalised_package_name: raw_line}`` dict.
+    """
+    result: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("#", "-")):
+            continue
+        # Strip inline comment (safe here: package lines don't embed bare #)
+        line_no_comment = line.split("#", maxsplit=1)[0].strip()
+        if not line_no_comment:
+            continue
+        name = _normalise_name(_strip_version_specifier(line_no_comment))
+        if name:
+            result[name] = line_no_comment
     return result
 
 

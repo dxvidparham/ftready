@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 
 from ftready.checker import build_results
-from ftready.constants import STATUS_FAILED, _DEFAULT_CACHE_TTL_HOURS
-from ftready.parser import load_dependencies, load_lockfile_dependencies
+from ftready.constants import _DEFAULT_CACHE_TTL_HOURS, STATUS_FAILED, STATUS_UNKNOWN
+from ftready.parser import load_dependencies, load_lockfile_dependencies, load_requirements
 from ftready.report import generate_report
 from ftready.scraper import fetch_ftchecker_db
 
@@ -85,6 +85,34 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Print progress to stderr.",
     )
+
+    # --- Input sources ---
+    source_group = parser.add_mutually_exclusive_group()
+    source_group.add_argument(
+        "--requirements",
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help=(
+            "Path to a requirements.txt-style file to check instead of pyproject.toml. "
+            "Can also be a custom dependency file as long as it follows requirements.txt syntax."
+        ),
+    )
+
+    # --- Pre-commit / CI exit-code control ---
+    parser.add_argument(
+        "--fail-on",
+        choices=["never", "failed", "unknown"],
+        default="failed",
+        metavar="{never,failed,unknown}",
+        help=(
+            "When to exit with code 1. "
+            "'failed' (default): at least one direct dep has a Failed status. "
+            "'unknown': Failed or Unknown status. "
+            "'never': always exit 0 (report only)."
+        ),
+    )
+
     return parser.parse_args(argv)
 
 
@@ -96,36 +124,52 @@ def main(argv: list[str] | None = None) -> int:
     """
     args = _parse_args(argv)
 
-    if not args.pyproject.exists():
-        print(f"Error: {args.pyproject} not found.", file=sys.stderr)
-        return 2
+    # ------------------------------------------------------------------ #
+    # Resolve dependencies                                                  #
+    # ------------------------------------------------------------------ #
+    direct_names: set[str] | None
 
-    if args.verbose:
-        print(f"[ftready] Reading {args.pyproject} …", file=sys.stderr)
-
-    direct_deps = load_dependencies(args.pyproject, include_dev=args.include_dev)
-    direct_names = set(direct_deps.keys())
-
-    if args.all_deps:
-        lock_path = args.lock or args.pyproject.parent / "poetry.lock"
-        if not lock_path.exists():
-            print(f"Error: {lock_path} not found. Run 'poetry lock' first.", file=sys.stderr)
+    if args.requirements is not None:
+        # requirements.txt mode — mutually exclusive with --all-deps / --lock
+        if not args.requirements.exists():
+            print(f"Error: {args.requirements} not found.", file=sys.stderr)
             return 2
         if args.verbose:
-            print(f"[ftready] Reading all deps from {lock_path} …", file=sys.stderr)
-        deps = load_lockfile_dependencies(lock_path, direct_names)
+            print(f"[ftready] Reading {args.requirements} …", file=sys.stderr)
+        deps = load_requirements(args.requirements)
+        direct_names = None  # every entry is treated as a direct dependency
         if args.verbose:
-            transitive = len(deps) - len(direct_names)
-            print(
-                f"[ftready] Found {len(deps)} packages in lock file "
-                f"({len(direct_names)} direct, {transitive} transitive).",
-                file=sys.stderr,
-            )
+            print(f"[ftready] Found {len(deps)} packages in {args.requirements}.", file=sys.stderr)
     else:
-        deps = direct_deps
+        if not args.pyproject.exists():
+            print(f"Error: {args.pyproject} not found.", file=sys.stderr)
+            return 2
         if args.verbose:
-            dev_note = " (including dev)" if args.include_dev else ""
-            print(f"[ftready] Found {len(deps)} direct dependencies{dev_note}.", file=sys.stderr)
+            print(f"[ftready] Reading {args.pyproject} …", file=sys.stderr)
+
+        direct_deps = load_dependencies(args.pyproject, include_dev=args.include_dev)
+        direct_names = set(direct_deps.keys())
+
+        if args.all_deps:
+            lock_path = args.lock or args.pyproject.parent / "poetry.lock"
+            if not lock_path.exists():
+                print(f"Error: {lock_path} not found. Run 'poetry lock' first.", file=sys.stderr)
+                return 2
+            if args.verbose:
+                print(f"[ftready] Reading all deps from {lock_path} …", file=sys.stderr)
+            deps = load_lockfile_dependencies(lock_path, direct_names)
+            if args.verbose:
+                transitive = len(deps) - len(direct_names)
+                print(
+                    f"[ftready] Found {len(deps)} packages in lock file "
+                    f"({len(direct_names)} direct, {transitive} transitive).",
+                    file=sys.stderr,
+                )
+        else:
+            deps = direct_deps
+            if args.verbose:
+                dev_note = " (including dev)" if args.include_dev else ""
+                print(f"[ftready] Found {len(deps)} direct dependencies{dev_note}.", file=sys.stderr)
 
     if args.no_cache and args.cache_file.exists():
         args.cache_file.unlink()
@@ -157,8 +201,16 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(report)
 
-    any_direct_failed = any(r.is_direct and STATUS_FAILED in {r.status_313t, r.status_314t} for r in results)
-    return 1 if any_direct_failed else 0
+    fail_on = args.fail_on
+    if fail_on == "never":
+        return 0
+    statuses_to_flag = {STATUS_FAILED}
+    if fail_on == "unknown":
+        statuses_to_flag.add(STATUS_UNKNOWN)
+    any_direct_bad = any(
+        r.is_direct and (r.status_313t in statuses_to_flag or r.status_314t in statuses_to_flag) for r in results
+    )
+    return 1 if any_direct_bad else 0
 
 
 if __name__ == "__main__":
