@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import rich_click as click
 
@@ -15,9 +14,6 @@ from ftready.diff import diff_reports, format_diff, format_diff_json
 from ftready.parser import load_dependencies, load_lockfile_dependencies, load_requirements
 from ftready.report import generate_report
 from ftready.scraper import fetch_ftchecker_db
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
 
 _logger = logging.getLogger(__name__)
 
@@ -31,13 +27,6 @@ def _find_lock_file(project_dir: Path) -> Path | None:
         if candidate.exists():
             return candidate
     return None
-
-
-def _lock_loader_for(
-    lock_path: Path,  # noqa: ARG001
-) -> Callable[[Path, set[str]], dict[str, str]]:
-    """Return the lock-file parser (all formats share the same ``[[package]]`` structure)."""
-    return load_lockfile_dependencies
 
 
 def _resolve_deps(
@@ -82,8 +71,7 @@ def _resolve_deps(
             msg = f"{lock_path} not found."
             raise click.UsageError(msg)
         _logger.info("[ftready] Reading all deps from %s …", lock_path)
-        loader = _lock_loader_for(lock_path)
-        deps = loader(lock_path, direct_names)
+        deps = load_lockfile_dependencies(lock_path, direct_names)
         transitive = len(deps) - len(direct_names)
         _logger.info(
             "[ftready] Found %d packages in lock file (%d direct, %d transitive).",
