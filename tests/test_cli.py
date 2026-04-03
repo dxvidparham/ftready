@@ -12,6 +12,12 @@ from ftready.models import PackageResult
 
 
 class TestCLI:
+    def test_version_flag(self):
+        runner = CliRunner()
+        result = runner.invoke(main, ["--version"])
+        assert result.exit_code == 0
+        assert "ftready" in result.output
+
     def test_missing_pyproject_returns_2(self, tmp_path: Path):
         runner = CliRunner()
         result = runner.invoke(main, ["--pyproject", str(tmp_path / "nonexistent.toml")])

@@ -30,7 +30,7 @@
 
 `ftready` scans your dependency tree, queries PyPI for `cp313t`/`cp314t` wheels, cross-references [ft-checker.com](https://ft-checker.com) test results, and tells you exactly where you stand:
 
-```
+```text
  Package          Compatibility   Details
 ─────────────────────────────────────────────────────
  numpy            ✅ Success      free-threaded wheel found
@@ -130,7 +130,7 @@ ftready --format json --output current.json
 ftready diff baseline.json current.json
 ```
 
-```
+```text
 ftready diff: 2025-01-15T12:00:00+00:00 → 2025-03-01T12:00:00+00:00
 
 3.13t ready: 5 → 8 (+3)
@@ -146,7 +146,7 @@ The diff also supports `--format json` for machine-readable output.
 
 ## 🔄 How It Works
 
-```
+```text
 pyproject.toml ─┐
 requirements.txt ┼──▶ Parse ──▶ PyPI API ──▶ ft-checker.com ──▶ Report
 uv.lock ────────┘      │        (parallel)     (optional)        │

@@ -100,7 +100,6 @@ lint.ignore = [
   "S310",    # suspicious-url-open-usage (we validate URLs)
   "TRY002",  # raise-vanilla-class
 ]
-lint.per-file-ignores."scripts/*.py" = [ "INP001" ]
 lint.fixable = [ "ALL" ]
 lint.unfixable = []
 lint.isort.known-first-party = [ "ftready" ]

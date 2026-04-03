@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 import rich_click as click
 
 from ftready.checker import build_results
-from ftready.constants import _DEFAULT_CACHE_TTL_HOURS, STATUS_FAILED, STATUS_UNKNOWN
+from ftready.constants import _DEFAULT_CACHE_TTL_HOURS, _USER_AGENT, STATUS_FAILED, STATUS_UNKNOWN
 from ftready.diff import diff_reports, format_diff, format_diff_json
 from ftready.parser import load_dependencies, load_lockfile_dependencies, load_requirements
 from ftready.report import generate_report
@@ -106,6 +106,10 @@ class _DefaultGroup(click.RichGroup):
 
     def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
         """Prepend the default subcommand when args don't start with a known command."""
+        # Let group-level flags (--help, --version) pass through to the group.
+        group_flags = {"--help", "-h", "--version"}
+        if args and args[0] in group_flags:
+            return super().parse_args(ctx, args)
         if args and args[0] not in self.commands and not args[0].startswith("-"):
             args = [self.default_cmd_name, *args]
         elif args and args[0] not in self.commands:
@@ -117,6 +121,7 @@ class _DefaultGroup(click.RichGroup):
 
 
 @click.group(cls=_DefaultGroup, help="Check project dependencies for free-threaded Python (3.13t/3.14t) compatibility.")
+@click.version_option(version=_USER_AGENT.partition("/")[2], prog_name="ftready")
 def main() -> None:
     """Entry point group — delegates to ``check`` by default."""
 
