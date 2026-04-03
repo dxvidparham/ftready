@@ -11,6 +11,7 @@ import rich_click as click
 
 from ftready.checker import build_results
 from ftready.constants import _DEFAULT_CACHE_TTL_HOURS, STATUS_FAILED, STATUS_UNKNOWN
+from ftready.diff import diff_reports, format_diff, format_diff_json
 from ftready.parser import load_dependencies, load_lockfile_dependencies, load_requirements, load_uv_lock_dependencies
 from ftready.report import generate_report
 from ftready.scraper import fetch_ftchecker_db
@@ -102,7 +103,24 @@ def _resolve_deps(
     return deps, direct_names
 
 
-@click.command(help="Check project dependencies for free-threaded Python (3.13t/3.14t) compatibility.")
+class _DefaultGroup(click.RichGroup):
+    """A click Group that falls through to a default subcommand when none is given."""
+
+    default_cmd_name: str = "check"
+
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        """Prepend the default subcommand when args don't start with a known command."""
+        if not args or args[0] not in self.commands:
+            args = [self.default_cmd_name, *args]
+        return super().parse_args(ctx, args)
+
+
+@click.group(cls=_DefaultGroup, help="Check project dependencies for free-threaded Python (3.13t/3.14t) compatibility.")
+def main() -> None:
+    """Entry point group — delegates to ``check`` by default."""
+
+
+@main.command(help="Check project dependencies for free-threaded Python compatibility.")
 @click.option(
     "--pyproject",
     type=click.Path(path_type=Path),
@@ -166,7 +184,7 @@ def _resolve_deps(
     show_default=True,
     help="When to exit with code 1.",
 )
-def main(
+def check(
     pyproject: Path,
     output: Path | None,
     cache_file: Path,
@@ -183,7 +201,7 @@ def main(
     requirements: Path | None,
     fail_on: str,
 ) -> None:
-    """Entry point for the free-threaded compatibility checker."""
+    """Run the free-threaded compatibility check."""
     if verbose:
         logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr, force=True)
 
@@ -237,3 +255,32 @@ def main(
     )
     if any_direct_bad:
         sys.exit(1)
+
+
+@main.command(name="diff", help="Compare two JSON reports to track compatibility changes over time.")
+@click.argument("old_report", type=click.Path(exists=True, path_type=Path))
+@click.argument("new_report", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+    help="Output format for the diff.",
+)
+@click.option("--output", type=click.Path(path_type=Path), default=None, help="Write the diff to this file.")
+def diff_cmd(
+    old_report: Path,
+    new_report: Path,
+    output_format: str,
+    output: Path | None,
+) -> None:
+    """Compare two ftready JSON reports and show what changed."""
+    summary = diff_reports(str(old_report), str(new_report))
+    result = format_diff_json(summary) if output_format == "json" else format_diff(summary)
+
+    if output:
+        output.write_text(result, encoding="utf-8")
+        click.echo(f"Diff written to {output}", err=True)
+    else:
+        click.echo(result)
