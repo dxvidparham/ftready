@@ -4,7 +4,7 @@ requires = [ "hatchling" ]
 
 [project]
 name = "ftready"
-version = "0.1.0"
+version = "1.0.0"
 description = "Check if your Python project dependencies are ready for free-threaded Python (3.13t/3.14t)"
 readme = "README.md"
 keywords = [ "compatibility", "dependencies", "free-threading", "gil", "nogil" ]
