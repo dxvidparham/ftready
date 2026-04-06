@@ -153,10 +153,13 @@ html.directory = "tests/reports/htmlcov"
 
 [tool.semantic_release]
 allow_zero_version = false
-branch = "main"
 branches.main.match = "(main|master)"
 branches.main.prerelease = false
-build_command = "uv build"
+build_command = """
+    uv lock --upgrade-package "$PACKAGE_NAME"
+    git add uv.lock
+    uv build
+"""
 changelog.default_templates.changelog_file = "CHANGELOG.md"
 changelog.default_templates.output_format = "md"
 changelog.exclude_commit_patterns = [
@@ -174,10 +177,6 @@ commit_parser = "conventional"
 commit_parser_options.minor_tags = [ "feat", "feature" ]
 commit_parser_options.other_allowed_tags = [ "build", "chore", "ci", "docs", "refactor", "style", "test" ]
 commit_parser_options.patch_tags = [ "fix", "perf" ]
-commit_version_number = true
 major_on_zero = true
 tag_format = "v{version}"
-upload_to_pypi = false
-upload_to_release = false
-version_source = "tag"
 version_toml = [ "pyproject.toml:project.version" ]

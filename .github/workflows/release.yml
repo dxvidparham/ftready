@@ -18,15 +18,19 @@ jobs:
     name: Semantic release
     runs-on: ubuntu-latest
     concurrency:
-      group: release
+      group: ${{ github.workflow }}-release-${{ github.ref_name }}
       cancel-in-progress: false
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repository on release branch
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Force release branch to workflow SHA
+        run: git reset --hard ${{ github.sha }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -44,16 +48,22 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          uv run semantic-release version --no-push
-          if git diff --quiet HEAD; then
+          BEFORE_SHA=$(git rev-parse HEAD)
+
+          uv run semantic-release -v version --no-push --no-vcs-release
+
+          AFTER_SHA=$(git rev-parse HEAD)
+
+          if [ "$BEFORE_SHA" = "$AFTER_SHA" ]; then
             echo "released=false" >> "$GITHUB_OUTPUT"
             echo "No release needed."
           else
             git push --follow-tags
-            VERSION=$(uv run semantic-release version --print)
+            VERSION=$(git tag --points-at HEAD | sed 's/^v//' | head -1)
+            TAG=$(git tag --points-at HEAD | head -1)
             echo "released=true" >> "$GITHUB_OUTPUT"
             echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-            echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           fi
 
       # Create a draft release for review before publishing.
@@ -64,7 +74,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ steps.release.outputs.tag }}"
-          uv run semantic-release changelog --post "$TAG"
+          uv run semantic-release changelog --post-to-release-tag "$TAG"
           gh release create "$TAG" \
             --draft \
             --title "$TAG" \
