@@ -260,6 +260,10 @@ When both sources report on a package, ft-checker.com takes priority — a packa
 - **ft-checker.com coverage**: The enrichment source covers ~1000 popular packages. Niche packages may only have PyPI wheel tag data.
 - **No transitive blocker tracing**: The tool reports status per-package but doesn't show dependency chains (e.g., "X depends on Y which depends on Z, and Z is the blocker").
 
+## 🤝 Acknowledgments
+
+This project was developed with assistance from AI tools (GitHub Copilot). All code has been reviewed, tested (92%+ coverage), and maintained by a human author.
+
 ## 📄 License
 
 [MIT](LICENSE)
